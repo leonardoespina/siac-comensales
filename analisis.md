@@ -1,0 +1,282 @@
+## 1. PRODUCTOS Y CONFIGURACIÓN
+
+El administrador crea productos con nombre, categoría, unidad (kg, litro, galón, etc.), stock mínimo y stock máximo.
+
+---
+
+## 2. RECEPCIÓN (ENTRADA AL ALMACÉN CENTRAL)
+
+Cuando llega mercancía al almacén central, el almacenista sigue este flujo:
+
+1. **Crea una recepción en estado BORRADOR**
+   - Registra:(CODIGO DE BARRA O RECONOCIMIENTO DE TEXTO) producto, cantidad, precio, fecha de vencimiento (si es perecedero)
+     También puede cargar muchos productos de una sola vez desde un archivo Excel. Si el producto, categoría o unidad no existe en el sistema, se crea automáticamente.
+     categoria,producto,cantidad,precio,fecha_vencimiento (opcional),unidad
+
+2. **Envía a PENDIENTE APROBACIÓN**
+
+3. **El Gerente revisa y APRUEBA o RECHAZA**
+   - Si rechaza, debe indicar el motivo
+
+4. **El Almacenista CONFIRMA la recepción física**
+
+5. **SE ACTUALIZA EL STOCK CENTRAL** (solo en este momento)
+
+**Regla importante:** No se puede recibir un producto ya vencido.
+
+---
+
+## 3. TRANSFERENCIA (CENTRAL → LOCAL)
+
+Cuando se necesita enviar productos a un comedor local:
+
+1. **Almacenista o Administrador Local crea transferencia en BORRADOR**
+   - Origen: almacén central
+   - Destino: almacén local
+   - Productos y cantidades
+
+2. **Envía a PENDIENTE APROBACIÓN**
+
+3. **El Gerente APRUEBA o RECHAZA**
+
+4. **El Almacenista DESPACHA** → se descuenta el stock central
+
+5. **El Operador del Comedor RECIBE** → se suma el stock local
+
+6. Si hay pérdida en tránsito, se registra la discrepancia
+
+**Regla importante:** El stock central solo se descuenta al despachar. El stock local solo se suma al recibir.
+
+---
+
+## 4. OPERACIÓN DIARIA (CONSUMO Y MERMA)
+
+En el comedor local, el operador sigue este proceso:
+
+1. **ABRE UN TURNO** al iniciar la jornada
+
+2. **Registra CONSUMOS** a lo largo del día
+   - Ejemplo: 5 kg de arroz, 2 L de aceite
+
+3. **Registra MERMAS** cuando ocurren:
+   - Vencimiento (producto caducó)
+   - Descomposición (producto se dañó)
+   - Merma de procesamiento (pérdida al pelar, cocinar)
+
+4. **CIERRA EL TURNO** al finalizar la jornada
+   - El sistema muestra un resumen de todos los movimientos
+
+**Reglas importantes:**
+
+- No se puede registrar consumo sin un turno abierto
+- No se puede abrir un nuevo turno si el anterior no está cerrado
+- No se puede consumir más stock del disponible
+
+---
+
+## 5. AJUSTES POR INVENTARIO FÍSICO
+
+Periódicamente (semanal o mensual), se realiza un conteo físico:
+
+1. **El Administrador registra el conteo físico**
+   - Stock real encontrado para cada producto
+
+2. **El sistema COMPARA** stock teórico (sistema) vs stock físico (conteo)
+
+3. **Genera un ajuste en BORRADOR** con la diferencia (sobrante o faltante)
+
+4. **Envía a PENDIENTE APROBACIÓN**
+
+5. **El Gerente APRUEBA** el ajuste
+
+6. **El sistema EJECUTA** el ajuste y actualiza el stock real
+
+**Regla importante:** Todo ajuste requiere aprobación del gerente.
+
+---
+
+## 6. ALERTAS Y NOTIFICACIONES
+
+El sistema genera alertas automáticas en tiempo real:
+
+| Alerta             | Condición                   | Color           |
+| ------------------ | --------------------------- | --------------- |
+| Stock bajo         | Stock actual ≤ stock mínimo | 🔴 Rojo         |
+| Stock crítico      | Stock actual = 0            | 🔴 Rojo intenso |
+| Exceso de stock    | Stock actual ≥ stock máximo | 🟡 Amarillo     |
+| Vence pronto       | Vence en menos de 7 días    | 🔴 Rojo         |
+| Vence próximamente | Vence en 7 a 14 días        | 🟡 Amarillo     |
+
+**Las notificaciones se envían a:**
+
+- Gerentes y administradores (stock bajo)
+- Operadores y almacenistas (vencimiento próximo)
+- Quien creó una operación (cuando es aprobada o rechazada)
+
+---
+
+## 7. REPORTES (4 principales)
+
+### Reporte 1: Valor por cada centro
+
+Muestra el valor económico (cantidad × precio) del inventario de cada almacén. Filtrable por fecha, almacén y categoría.
+
+### Reporte 2: Alerta de stop
+
+Lista todos los productos con problemas (stock bajo, exceso, vencimiento próximo). Ordenado por prioridad (lo más urgente primero).
+
+### Reporte 3: Cantidades mínimas y máximas por rubro
+
+Muestra por categoría qué productos están por debajo del mínimo, dentro del rango, o por encima del máximo.
+
+### Reporte 4: Reporte de consumo
+
+- **Versión diaria:** consumos del día (producto, cantidad, responsable)
+- **Versión acumulada:** consumo por semana o mes
+- **Por tipo:** separa consumo útil de mermas
+
+---
+
+## 8. ROLES Y USUARIOS
+
+### Roles predefinidos (ejemplo inicial)
+
+| Rol               | Qué puede hacer                                                       |
+| ----------------- | --------------------------------------------------------------------- |
+| **Operador**      | Registrar consumos y mermas, abrir/cerrar turno                       |
+| **Almacenista**   | Recibir productos, hacer transferencias, gestionar lotes              |
+| **Administrador** | Crear/editar productos, categorías, unidades, usuarios, roles         |
+| **Gerente**       | Aprobar recepciones, transferencias y ajustes, ver todos los reportes |
+| **Auditor**       | Ver y exportar reportes, solo lectura                                 |
+
+### Los roles son DINÁMICOS
+
+El administrador puede crear nuevos roles (ejemplo: "Jefe de Cocina", "Supervisor") y asignarles permisos específicos por módulo.
+
+### Un usuario puede tener MÚLTIPLES ROLES
+
+Los permisos se acumulan. Ejemplo: un usuario puede ser Operador y Almacenista a la vez.
+
+---
+
+## 9. FLUJO DE APROBACIÓN (Patrón común)
+
+Las operaciones críticas siguen este mismo patrón:
+BORRADOR → PENDIENTE → APROBADO → EJECUTADO/CONFIRMADO
+↓ ↓ ↓
+CANCELADO RECHAZADO RECHAZADO
+
+text
+
+| Estado               | ¿Afecta stock? |
+| -------------------- | -------------- |
+| Borrador             | ❌ No          |
+| Pendiente            | ❌ No          |
+| Aprobado             | ❌ No          |
+| Rechazado            | ❌ No          |
+| Ejecutado/Confirmado | ✅ Sí          |
+| Cancelado            | ❌ No          |
+
+**Regla importante:** El creador de una operación NO puede aprobarla. La aprobación siempre la hace otro rol (generalmente Gerente).
+
+---
+
+## 10. DIAGRAMA DE FLUJO RESUMIDO
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ FLUJO COMPLETO DEL SISTEMA │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+[Carga Masiva Excel]
+│
+▼
+[Creación automática: productos, categorías, unidades]
+│
+▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ RECEPCIÓN (Almacén Central) │
+│ Borrador → Pendiente → Aprobado (Gerente) → Confirmado (Almacenista) │
+│ │ │
+│ ▼ │
+│ [STOCK CENTRAL ACTUALIZADO] │
+└─────────────────────────────────────────────────────────────────────────────┘
+│
+▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ TRANSFERENCIA (Central → Local) │
+│ Borrador → Pendiente → Aprobado (Gerente) → Despachado (Almacenista) │
+│ │ │
+│ ▼ │
+│ [Stock central disminuye] │
+│ │ │
+│ ▼ │
+│ Recibido (Operador Local) │
+│ │ │
+│ ▼ │
+│ [STOCK LOCAL ACTUALIZADO] │
+└─────────────────────────────────────────────────────────────────────────────┘
+│
+▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ OPERACIÓN DIARIA (Comedor Local) │
+│ │
+│ [Abrir Turno] → [Registrar Consumo] → [Registrar Merma] → [Cerrar Turno] │
+│ │
+│ Nota: Todo consumo requiere turno activo │
+└─────────────────────────────────────────────────────────────────────────────┘
+│
+▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ AJUSTE POR INVENTARIO FÍSICO │
+│ │
+│ [Conteo físico] → [Comparación] → [Borrador] → [Pendiente] → [Aprobado] │
+│ (Gerente) │
+│ │ │
+│ ▼ │
+│ [Ejecutar ajuste] │
+│ │ │
+│ ▼ │
+│ [STOCK CORREGIDO] │
+└─────────────────────────────────────────────────────────────────────────────┘
+│
+▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ REPORTES Y NOTIFICACIONES │
+│ │
+│ Reportes: │
+│ • Valor por cada centro │
+│ • Alerta de stop │
+│ • Mínimos y máximos por rubro │
+│ • Consumo │
+│ │
+│ Notificaciones en tiempo real: stock bajo, vencimiento, aprobaciones │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+text
+
+---
+
+## 11. REGLAS CLAVE (RESUMEN)
+
+| #   | Regla                                                     |
+| --- | --------------------------------------------------------- |
+| 1   | No se puede consumir más stock del disponible             |
+| 2   | Productos perecederos requieren fecha de vencimiento      |
+| 3   | El stock central no puede ser negativo                    |
+| 4   | Sin turno abierto no hay consumo                          |
+| 5   | Sin cerrar turno anterior no se abre el siguiente         |
+| 6   | Todo ajuste requiere aprobación del gerente               |
+| 7   | El creador no puede aprobar su propia operación           |
+| 8   | El stock solo se actualiza en estado Ejecutado/Confirmado |
+| 9   | El rechazo de una operación debe incluir motivo           |
+| 10  | Los roles son dinámicos (se pueden crear nuevos)          |
+
+---
+
+## 12. EN UNA SOLA FRASE
+
+> El sistema recibe productos en el almacén central (con aprobación), los transfiere a los comedores locales (con aprobación), los operadores consumen o registran pérdidas (con turno activo), y todo se refleja en reportes y alertas en tiempo real.
+
+---
+
+## FIN DEL RESUMEN
