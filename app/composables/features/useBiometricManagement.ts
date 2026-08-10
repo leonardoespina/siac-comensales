@@ -26,7 +26,13 @@ export function useBiometricManagement() {
       diner.value = await store.fetchByCedula(queryCedula)
     } catch (error: any) {
       if (error.response?.status !== 404) {
-        $q.notify({ type: 'negative', message: error.data?.message || 'Error al buscar comensal' })
+        let msg = error.data?.message || error.message || 'Error al buscar comensal'
+        if (msg.includes('DP_FAILURE')) {
+          msg = 'Lectura fallida. Limpie el sensor de huella e intente nuevamente.'
+        } else if (msg.includes('Validation')) {
+          msg = 'Formato de cédula inválido.'
+        }
+        $q.notify({ type: 'negative', message: msg })
       }
     } finally {
       isSearching.value = false

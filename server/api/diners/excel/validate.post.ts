@@ -28,15 +28,15 @@ export default defineApiHandler(async (event) => {
   const uniqueAreas = [...new Set(rows.map(r => r.areaName))]
   const uniquePositions = [...new Set(rows.filter(r => r.positionName).map(r => r.positionName))]
   const uniqueSquads = [...new Set(rows.map(r => r.squadName))]
-  const uniqueWarehouses = [...new Set(rows.map(r => r.comedorName))]
+  const uniqueSites = [...new Set(rows.map(r => r.sedeName || r.comedorName))]
   const uniqueCedulas = [...new Set(rows.map(r => r.cedula))]
 
   // Cargar diccionarios desde la BD
-  const [dbAreas, dbPositions, dbSquads, dbWarehouses, dbDiners] = await Promise.all([
+  const [dbAreas, dbPositions, dbSquads, dbSites, dbDiners] = await Promise.all([
     prisma.subdependency.findMany({ where: { name: { in: uniqueAreas, mode: 'insensitive' } } }),
     prisma.position.findMany({ where: { name: { in: uniquePositions, mode: 'insensitive' } } }),
     prisma.squad.findMany({ where: { name: { in: uniqueSquads, mode: 'insensitive' } } }),
-    prisma.warehouse.findMany({ where: { name: { in: uniqueWarehouses as string[], mode: 'insensitive' }, type: 'LOCAL' } }),
+    prisma.site.findMany({ where: { name: { in: uniqueSites as string[], mode: 'insensitive' } } }),
     prisma.diner.findMany({ where: { cedula: { in: uniqueCedulas } }, select: { cedula: true } })
   ])
 
@@ -44,7 +44,7 @@ export default defineApiHandler(async (event) => {
   const areaMap = new Map(dbAreas.map(a => [a.name.toUpperCase(), a]))
   const positionMap = new Map(dbPositions.map(p => [p.name.toUpperCase(), p]))
   const squadMap = new Map(dbSquads.map(s => [s.name.toUpperCase(), s]))
-  const warehouseMap = new Map(dbWarehouses.map(w => [w.name.toUpperCase(), w]))
+  const siteMap = new Map(dbSites.map(s => [s.name.toUpperCase(), s]))
   const dinerSet = new Set(dbDiners.map(d => d.cedula))
 
   // Validar fila por fila
@@ -81,10 +81,10 @@ export default defineApiHandler(async (event) => {
       errors.push(`La cuadrilla '${row.squadName}' no existe.`)
     }
 
-    // 4. Validar Comedor
-    const warehouseKey = (row.comedorName || '').toUpperCase()
-    if (!warehouseMap.has(warehouseKey)) {
-      errors.push(`El comedor '${row.comedorName}' no existe.`)
+    // 4. Validar Sede Base
+    const siteKey = (row.sedeName || row.comedorName || '').toUpperCase()
+    if (!siteMap.has(siteKey)) {
+      errors.push(`La sede '${row.sedeName || row.comedorName}' no existe.`)
     }
 
     // Determinar si es actualización o inserción para la UI

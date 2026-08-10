@@ -108,7 +108,11 @@ export function useBiometrics() {
       if (err.name === 'AbortError' || err.statusCode === 499) {
         console.log('Enrolamiento cancelado')
       } else {
-        $q.notify({ type: 'negative', message: err.data?.message || err.message || 'El enrolamiento falló.' })
+        let errorMsg = err.data?.message || err.message || 'El enrolamiento falló.'
+        if (errorMsg.includes('DP_FAILURE')) {
+          errorMsg = 'Lectura fallida. Limpie el sensor de huella e intente nuevamente.'
+        }
+        $q.notify({ type: 'negative', message: errorMsg })
       }
       return null
     } finally {
@@ -150,7 +154,11 @@ export function useBiometrics() {
       if (err.name === 'AbortError' || err.statusCode === 499 || err.message?.includes('aborted')) {
         console.log('Verificación cancelada por el usuario')
       } else {
-        $q.notify({ type: 'negative', message: err.data?.message || err.message || 'Error en validación biométrica.' })
+        let errorMsg = err.data?.message || err.message || 'Error en validación biométrica.'
+        if (errorMsg.includes('DP_FAILURE')) {
+          errorMsg = 'Lectura fallida. Limpie el sensor de huella e intente nuevamente.'
+        }
+        $q.notify({ type: 'negative', message: errorMsg })
       }
       return null
     } finally {
