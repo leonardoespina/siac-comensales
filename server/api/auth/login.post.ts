@@ -56,7 +56,7 @@ export default defineApiHandler(async (event) => {
   // 4.1. Setear token en Cookie segura (HttpOnly)
   setCookie(event, 'auth_token', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: getRequestURL(event).protocol === 'https:',
     sameSite: 'lax',
     maxAge: 60 * 60 * 24 // 24 horas
   })
