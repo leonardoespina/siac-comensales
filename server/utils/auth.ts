@@ -6,9 +6,9 @@ import { prisma } from './prisma'
 // ── PROTECCIÓN DE RUTAS Y PERMISOS DINÁMICOS ──────────────────────────────
 // Estas funciones se usarán en todos los endpoints (handlers) que requieran seguridad.
 
-export function hasGlobalAccess(user: { warehouseId?: number | null, diningRoomId?: number | null, roleName?: string }): boolean {
-  // Un usuario tiene acceso global a los datos de sedes (ver todo) SOLO si NO tiene un comedor/almacén asignado.
-  return !user.warehouseId && !user.diningRoomId
+export function hasGlobalAccess(user: { warehouseId?: number | null, siteIds?: number[], roleName?: string }): boolean {
+  // Un usuario tiene acceso global a los datos de sedes (ver todo) SOLO si NO tiene sedes o almacenes asignados.
+  return !user.warehouseId && (!user.siteIds || user.siteIds.length === 0)
 }
 
 
@@ -41,7 +41,7 @@ export async function requireUserContext(event: H3Event) {
   const userId = await requireAuth(event)
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    include: { role: { include: { permissions: { include: { module: true } } } } }
+    include: { role: { include: { permissions: { include: { module: true } } } }, sites: true }
   })
   if (!user) throw new UnauthorizedError('Usuario no encontrado')
   return {
@@ -49,7 +49,7 @@ export async function requireUserContext(event: H3Event) {
     roleName: user.role.name,
     isGlobal: user.role.permissions?.some(p => p.module.code === 'GLOBAL_ACCESS' && p.canRead) || false,
     warehouseId: user.warehouseId,
-    diningRoomId: user.diningRoomId,
+    siteIds: user.sites?.map(s => s.id) || [],
     dependencyId: user.dependencyId,
     subdependencyId: user.subdependencyId
   }

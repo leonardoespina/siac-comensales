@@ -24,13 +24,15 @@ export default defineApiHandler(async (event) => {
       cedula: body.cedula,
       name: body.name,
       roleId: parseInt(body.roleId),
-      warehouseId: body.warehouseId ? parseInt(body.warehouseId) : null,
+      sites: body.siteIds?.length ? {
+        connect: body.siteIds.map((id: number) => ({ id: Number(id) }))
+      } : undefined,
       dependencyId: body.dependencyId ? parseInt(body.dependencyId) : null,
       subdependencyId: body.subdependencyId ? parseInt(body.subdependencyId) : null,
       passwordHash,
       active: true
     },
-    include: { role: { select: { id: true, name: true } } }
+    include: { role: { select: { id: true, name: true } }, sites: true }
   })
 
   await logAudit(admin.id, 'CREATE', 'USER', newUser.id, `Usuario creado: ${newUser.cedula}`)

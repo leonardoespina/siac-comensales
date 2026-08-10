@@ -12,9 +12,9 @@ export default defineApiHandler(async (event) => {
   const body = await readBody(event)
 
   const squadId = Number(body.squadId)
-  const diningRoomId = Number(body.diningRoomId)
+  const siteId = Number(body.siteId)
 
-  if (!squadId || !body.cedula || !body.name || !diningRoomId) {
+  if (!squadId || !body.cedula || !body.name || !siteId) {
     throw new ValidationError('Cédula, nombre, cuadrilla y comedor son obligatorios.')
   }
 
@@ -59,7 +59,7 @@ export default defineApiHandler(async (event) => {
     rationType: body.rationType,
     squadId: Number(body.squadId),
     subdependencyId: targetSubdependencyId,
-    diningRoomId,
+    siteId,
     positionId: body.positionId ? Number(body.positionId) : undefined
   })
 

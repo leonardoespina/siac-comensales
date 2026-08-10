@@ -23,6 +23,7 @@ async function main() {
     { code: 'MY_SQUADS', name: 'Mis Cuadrillas (Local)' },
     { code: 'DINERS_REQUESTS', name: 'Solicitud de Comidas' },
     { code: 'DINING_ROOMS', name: 'Gestión de Comedores' },
+    { code: 'SITES', name: 'Gestión de Sedes' },
     { code: 'AUDIT', name: 'Auditoría del Sistema' },
     { code: 'GLOBAL_ACCESS', name: 'Acceso Global sin Restricciones' }
   ]

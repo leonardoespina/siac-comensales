@@ -4,7 +4,7 @@ import { useSquadsStore } from '~/stores/squads'
 import { useDinersStore } from '~/stores/diners'
 import { useDependenciesStore } from '~/stores/dependencies'
 import { usePositionsStore } from '~/stores/positions'
-import { useDiningRoomsStore } from '~/stores/diningRooms'
+import { useSitesStore } from '~/stores/sites'
 import { useAuthStore } from '~/stores/auth'
 
 export function useWorkersTable(formDataDependencyId: any) {
@@ -13,7 +13,7 @@ export function useWorkersTable(formDataDependencyId: any) {
   const dinersStore = useDinersStore()
   const depStore = useDependenciesStore()
   const positionsStore = usePositionsStore()
-  const diningRoomsStore = useDiningRoomsStore()
+  const sitesStore = useSitesStore()
   const authStore = useAuthStore()
 
   // Filtros para Admin Global y Búsqueda
@@ -23,7 +23,7 @@ export function useWorkersTable(formDataDependencyId: any) {
   // Estado del Smart Filter
   const filterState = ref({
     search: '',
-    diningRoomId: null,
+    siteId: null,
     positionId: null,
     rationType: null
   })
@@ -54,13 +54,13 @@ export function useWorkersTable(formDataDependencyId: any) {
       }))
   })
 
-  // Opciones de Comedores
-  const diningRoomOptions = computed(() => {
-    return diningRoomsStore.diningRooms
-      .filter(dr => dr.active !== false)
-      .map(dr => ({
-        label: dr.name,
-        value: dr.id
+  // Opciones de Sedes
+  const siteOptions = computed(() => {
+    return sitesStore.sites
+      .filter(site => site.active !== false)
+      .map(site => ({
+        label: site.name,
+        value: site.id
       }))
   })
 
@@ -72,10 +72,10 @@ export function useWorkersTable(formDataDependencyId: any) {
   // Esquema dinámico para el Smart Filter
   const smartFilterSchema = computed(() => [
     { 
-      key: 'diningRoomId', 
-      label: 'Comedor Base', 
+      key: 'siteId', 
+      label: 'Sede Base', 
       type: 'select', 
-      options: diningRoomOptions.value,
+      options: siteOptions.value,
       colSpan: 4
     },
     { 
@@ -147,7 +147,14 @@ export function useWorkersTable(formDataDependencyId: any) {
   const columns = [
     { name: 'cedula', label: 'Cédula', field: 'cedula', align: 'left', sortable: true },
     { name: 'name', label: 'Nombre Completo', field: 'name', align: 'left', sortable: true },
-    { name: 'diningRoom', label: 'Comedor Base', field: (row: any) => row.diningRoom?.name || 'No Asignado', align: 'left', sortable: true },
+    { 
+      name: 'site', 
+      required: true, 
+      label: 'Sede Base', 
+      align: 'left', 
+      field: (row: any) => row.site?.name || 'No asignada',
+      sortable: true
+    },
     { name: 'position', label: 'Cargo', field: (row: any) => row.position?.name || 'Sin Cargo', align: 'left', sortable: true },
     { name: 'rationType', label: 'Tipo de Ración', field: 'rationType', align: 'center' },
     { name: 'actions', label: 'Opciones', field: 'actions', align: 'center' }
@@ -181,7 +188,7 @@ export function useWorkersTable(formDataDependencyId: any) {
       }
       
       // 2. Filtrado exacto por Selects
-      if (terms.diningRoomId && row.diningRoomId !== terms.diningRoomId) return false
+      if (terms.siteId && row.siteId !== terms.siteId) return false
       if (terms.positionId && row.positionId !== terms.positionId) return false
       if (terms.rationType && row.rationType !== terms.rationType) return false
       
@@ -217,7 +224,7 @@ export function useWorkersTable(formDataDependencyId: any) {
     rationOptions,
     squadOptions,
     positionOptions,
-    diningRoomOptions,
+    siteOptions,
     dependencyOptions,
     smartFilterSchema,
     filterSubdependencyOptions,

@@ -39,6 +39,7 @@ async function main() {
     { code: 'MY_SQUADS', name: 'Mis Cuadrillas (Local)' },
     { code: 'DINERS_REQUESTS', name: 'Solicitud de Comidas' },
     { code: 'DINING_ROOMS', name: 'Gestión de Comedores' },
+    { code: 'SITES', name: 'Gestión de Sedes' },
     { code: 'SUPPLIERS', name: 'Catálogo de Proveedores' },
     { code: 'INSTITUTIONS', name: 'Instituciones (Apoyos)' },
     { code: 'AUDIT', name: 'Auditoría del Sistema' },
@@ -114,25 +115,37 @@ async function main() {
   })
   console.log('✅ Usuario Administrador creado (Cédula: V-12345678 | Pass: 123456).')
 
-  // 5. Crear Almacén y Comedor de prueba
-  const warehouse = await prisma.warehouse.upsert({
-    where: { name: 'Almacén Central MSB' },
+  // 5. Crear Sedes y Comedor de prueba
+  const sitePLC = await prisma.site.upsert({
+    where: { name: 'PLC' },
     update: {},
     create: {
-      name: 'Almacén Central MSB',
-      type: 'CENTRAL'
+      name: 'PLC',
+      description: 'Sede Principal'
     }
   })
 
-  await prisma.diningRoom.upsert({
-    where: { name: 'Comedor MSB' },
+  const siteMSB = await prisma.site.upsert({
+    where: { name: 'MSB' },
     update: {},
     create: {
-      name: 'Comedor MSB',
-      warehouseId: warehouse.id
+      name: 'MSB',
+      description: 'Sede MSB'
     }
   })
-  console.log('✅ Comedor MSB creado y vinculado al Almacén.')
+  console.log('✅ Sedes PLC y MSB creadas.')
+
+  await prisma.diningRoom.upsert({
+    where: { name: 'Comedor Principal' },
+    update: {
+      siteId: sitePLC.id
+    },
+    create: {
+      name: 'Comedor Principal',
+      siteId: sitePLC.id
+    }
+  })
+  console.log('✅ Comedor Principal creado y vinculado a la sede PLC.')
 
   console.log('🚀 Seed terminado exitosamente.')
 }

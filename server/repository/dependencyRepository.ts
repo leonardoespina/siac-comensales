@@ -12,12 +12,16 @@ import type { Prisma } from '@prisma/client'
 
 // --- DEPENDENCIAS ---
 
-export async function getAllDependencies() {
+export async function getAllDependencies(includeInactive: boolean = false) {
   return prisma.dependency.findMany({
-    where: { active: true },
+    where: {
+      ...(includeInactive ? {} : { active: true })
+    },
     include: {
       subdependencies: {
-        where: { active: true },
+        where: {
+          ...(includeInactive ? {} : { active: true })
+        },
         include: {
           diners: {
             select: {
@@ -45,16 +49,33 @@ export async function updateDependency(id: number, name: string) {
 }
 
 export async function deleteDependency(id: number) {
-  return prisma.dependency.delete({
-    where: { id }
+  return prisma.dependency.update({
+    where: { id },
+    data: { active: false }
+  })
+}
+
+export async function restoreDependency(id: number) {
+  return prisma.dependency.update({
+    where: { id },
+    data: { active: true }
+  })
+}
+
+export async function countActiveSubdependencies(dependencyId: number) {
+  return prisma.subdependency.count({
+    where: { dependencyId, active: true }
   })
 }
 
 // --- SUBDEPENDENCIAS ---
 
-export async function getSubdependenciesByDependency(dependencyId: number) {
+export async function getSubdependenciesByDependency(dependencyId: number, includeInactive: boolean = false) {
   return prisma.subdependency.findMany({
-    where: { dependencyId },
+    where: { 
+      dependencyId,
+      ...(includeInactive ? {} : { active: true })
+    },
     orderBy: { name: 'asc' }
   })
 }
@@ -79,16 +100,32 @@ export async function updateSubdependency(id: number, name: string, dependencyId
 }
 
 export async function deleteSubdependency(id: number) {
-  return prisma.subdependency.delete({
-    where: { id }
+  return prisma.subdependency.update({
+    where: { id },
+    data: { active: false }
+  })
+}
+
+export async function restoreSubdependency(id: number) {
+  return prisma.subdependency.update({
+    where: { id },
+    data: { active: true }
+  })
+}
+
+export async function countActiveDinersBySubdependency(subdependencyId: number) {
+  return prisma.diner.count({
+    where: { subdependencyId, active: true }
   })
 }
 
 // --- CUADRILLAS (SQUADS) ---
 
-export async function getAllSquads() {
+export async function getAllSquads(includeInactive: boolean = false) {
   return prisma.squad.findMany({
-    where: { active: true },
+    where: {
+      ...(includeInactive ? {} : { active: true })
+    },
     orderBy: { name: 'asc' }
   })
 }
@@ -110,5 +147,11 @@ export async function deleteSquad(id: number) {
   return prisma.squad.update({
     where: { id },
     data: { active: false }
+  })
+}
+
+export async function countActiveDinersBySquad(squadId: number) {
+  return prisma.diner.count({
+    where: { squadId, active: true }
   })
 }

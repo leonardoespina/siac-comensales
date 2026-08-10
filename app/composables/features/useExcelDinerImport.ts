@@ -19,9 +19,9 @@ export function useExcelDinerImport() {
 
   const downloadTemplate = () => {
     const wsData = [
-      ['Cédula', 'Nombre', 'Área Destino', 'Comedor', 'Cargo', 'Cuadrilla', 'Tipo Ración'],
-      ['V-12345678', 'Leonardo Espina', 'DIVISION DE PROGRAMACION', 'Sede Principal', 'Gerente de TI', 'Administrativa', 'NORMAL'],
-      ['V-98765432', 'María Perez', 'DIVISION DE PROGRAMACION', 'Sede Principal', 'Secretaria', 'Cuadrilla A', 'DIETA'],
+      ['Cédula', 'Nombre', 'Área Destino', 'Sede Base', 'Cargo', 'Cuadrilla', 'Tipo Ración'],
+      ['V-12345678', 'Leonardo Espina', 'DIVISION DE PROGRAMACION', 'PLC', 'Gerente de TI', 'Administrativa', 'NORMAL'],
+      ['V-98765432', 'María Perez', 'DIVISION DE PROGRAMACION', 'PLC', 'Secretaria', 'Cuadrilla A', 'DIETA'],
     ]
     const ws = XLSX.utils.aoa_to_sheet(wsData)
     const wb = XLSX.utils.book_new()
@@ -69,7 +69,7 @@ export function useExcelDinerImport() {
           cedula: String(r['Cédula'] || '').trim().toUpperCase(),
           name: normalizeText(r['Nombre']),
           areaName: normalizeText(r['Área Destino'] || r['Area Destino'] || r['Área'] || r['Area']),
-          comedorName: normalizeText(r['Comedor']),
+          sedeName: normalizeText(r['Sede Base'] || r['Sede'] || r['Comedor']),
           positionName: normalizeText(r['Cargo']),
           squadName: normalizeText(r['Cuadrilla']),
           rationType
@@ -80,12 +80,12 @@ export function useExcelDinerImport() {
       const rowsToValidate: any[] = []
 
       for (const r of parsedRows) {
-        if (!r.cedula || !r.name || !r.squadName || !r.comedorName || !r.areaName) {
+        if (!r.cedula || !r.name || !r.squadName || !r.sedeName || !r.areaName) {
            const missing = []
            if (!r.cedula) missing.push('Cédula')
            if (!r.name) missing.push('Nombre')
            if (!r.areaName) missing.push('Área Destino')
-           if (!r.comedorName) missing.push('Comedor')
+           if (!r.sedeName) missing.push('Sede Base')
            if (!r.squadName) missing.push('Cuadrilla')
            
            missingFieldsRows.push({

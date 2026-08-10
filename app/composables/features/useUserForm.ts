@@ -20,12 +20,13 @@ export function useUserForm() {
 
     dependencyId: null as number | null,
     subdependencyId: null as number | null,
+    siteIds: [] as number[],
     active: true
   })
 
   function openCreate() {
     isEditing.value = false
-    form.value = { id: 0, cedula: '', name: '', password: '', roleId: null, dependencyId: null, subdependencyId: null, active: true }
+    form.value = { id: 0, cedula: '', name: '', password: '', roleId: null, dependencyId: null, subdependencyId: null, siteIds: [], active: true }
     isOpen.value = true
   }
 
@@ -45,7 +46,8 @@ export function useUserForm() {
       }
     }
     
-    form.value = { ...user, dependencyId: depId, password: '' }
+    const siteIds = user.sites?.map((s: any) => s.id) || []
+    form.value = { ...user, dependencyId: depId, siteIds, password: '' }
     isOpen.value = true
   }
 

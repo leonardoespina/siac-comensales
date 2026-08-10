@@ -1,9 +1,9 @@
 import { ref } from 'vue'
 import { useQuasar } from 'quasar'
-import { useDiningRoomsStore } from '~/stores/diningRooms'
+import { useSitesStore } from '~/stores/sites'
 
-export function useDiningRoomForm() {
-  const store = useDiningRoomsStore()
+export function useSiteForm() {
+  const store = useSitesStore()
   const $q = useQuasar()
   
   const isDialogOpen = ref(false)
@@ -11,7 +11,7 @@ export function useDiningRoomForm() {
   const form = ref({
     id: 0,
     name: '',
-    siteId: null as number | null,
+    description: '',
     active: true
   })
 
@@ -19,7 +19,7 @@ export function useDiningRoomForm() {
     form.value = {
       id: 0,
       name: '',
-      siteId: null,
+      description: '',
       active: true
     }
   }
@@ -34,7 +34,7 @@ export function useDiningRoomForm() {
     form.value = { 
       id: row.id,
       name: row.name,
-      siteId: row.siteId,
+      description: row.description || '',
       active: row.active 
     }
     isEditing.value = true
@@ -45,29 +45,29 @@ export function useDiningRoomForm() {
     try {
       if (isEditing.value) {
         await store.update(form.value.id, form.value)
-        $q.notify({ type: 'positive', message: 'Comedor actualizado exitosamente' })
+        $q.notify({ type: 'positive', message: 'Sede actualizada exitosamente' })
       } else {
         await store.create(form.value)
-        $q.notify({ type: 'positive', message: 'Comedor creado exitosamente' })
+        $q.notify({ type: 'positive', message: 'Sede creada exitosamente' })
       }
       isDialogOpen.value = false
     } catch (e: any) {
-      $q.notify({ type: 'negative', message: e.data?.message || 'Error al guardar el comedor' })
+      $q.notify({ type: 'negative', message: e.data?.message || 'Error al guardar la sede' })
     }
   }
 
   const remove = (id: number) => {
     $q.dialog({
-      title: 'Confirmar Eliminación',
-      message: '¿Estás seguro de que deseas desactivar este comedor?',
+      title: 'Confirmar Acción',
+      message: '¿Estás seguro de que deseas desactivar esta sede?',
       cancel: true,
       persistent: true
     }).onOk(async () => {
       try {
         await store.remove(id)
-        $q.notify({ type: 'positive', message: 'Comedor desactivado' })
+        $q.notify({ type: 'positive', message: 'Sede desactivada exitosamente' })
       } catch (e: any) {
-        $q.notify({ type: 'negative', message: 'Error al desactivar el comedor' })
+        $q.notify({ type: 'negative', message: 'Error al desactivar la sede' })
       }
     })
   }

@@ -15,6 +15,23 @@
           <q-badge color="primary" :label="props.row.role?.name" />
         </q-td>
       </template>
+
+      <template v-slot:body-cell-sites="props">
+        <q-td :props="props" align="center">
+          <q-chip 
+            v-for="site in (props.row.sites || [])" 
+            :key="site.id" 
+            color="secondary" 
+            text-color="white" 
+            size="sm" 
+            dense 
+            outline
+          >
+            {{ site.name }}
+          </q-chip>
+          <span v-if="!props.row.sites || props.row.sites.length === 0" class="text-caption text-grey">Global</span>
+        </q-td>
+      </template>
       
 
       <template v-slot:body-cell-status="props">
@@ -120,6 +137,22 @@
             </template>
           </q-select>
         </div>
+        <div class="col-12 col-md-6">
+          <q-select 
+            v-model="form.siteIds" 
+            :options="siteOptions" 
+            option-value="id"
+            option-label="name"
+            emit-value 
+            map-options 
+            label="Sedes Autorizadas" 
+            outlined 
+            dense
+            multiple
+            use-chips
+            clearable
+          />
+        </div>
         <div class="col-12" v-if="isEditing">
           <q-input v-model="form.password" label="Nueva Contraseña (Dejar en blanco si no se cambia)" outlined dense type="password" />
         </div>
@@ -136,6 +169,7 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { useUsersStore } from '~/stores/users'
 import { useRolesStore } from '~/stores/roles'
 import { useDependenciesStore } from '~/stores/dependencies'
+import { useSitesStore } from '~/stores/sites'
 import { useUserForm } from '~/composables/features/useUserForm'
 import { useQuasar } from 'quasar'
 
@@ -143,6 +177,7 @@ const $q = useQuasar()
 const store = useUsersStore()
 const rolesStore = useRolesStore()
 const depStore = useDependenciesStore()
+const sitesStore = useSitesStore()
 const { isOpen, isEditing, loading, form, openCreate, openEdit, submit } = useUserForm()
 
 const filter = ref('')
@@ -151,6 +186,7 @@ const filter = ref('')
 const roleOptions = ref<any[]>([])
 const dependencyOptions = ref<any[]>([])
 const subdependencyOptions = ref<any[]>([])
+const siteOptions = computed(() => sitesStore.sites.filter(s => s.active !== false))
 
 // Inicializamos las opciones cuando se abre el modal para que los selects puedan mapear ID -> Nombre
 watch(isOpen, (val) => {
@@ -191,6 +227,7 @@ const columns = [
   { name: 'cedula', label: 'Cédula', field: 'cedula', align: 'left', sortable: true },
   { name: 'name', label: 'Nombre', field: 'name', align: 'left', sortable: true },
   { name: 'role', label: 'Rol', field: 'role', align: 'center', sortable: true },
+  { name: 'sites', label: 'Sedes Autorizadas', align: 'center' },
 
   { name: 'status', label: 'Estado', field: 'active', align: 'center', sortable: true },
   { name: 'actions', label: 'Acciones', align: 'right' }
@@ -214,8 +251,9 @@ const deleteUser = (id: number) => {
 onMounted(async () => {
   await Promise.all([
     store.fetchUsers(),
-    rolesStore.fetchRoles(), // Necesitamos los roles para llenar el select
-    depStore.fetchAll() // Necesitamos las subdependencias para el select
+    rolesStore.fetchRoles(),
+    depStore.fetchAll(),
+    sitesStore.fetchSites()
   ])
 })
 </script>

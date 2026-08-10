@@ -87,21 +87,21 @@ export async function approveDinerRequest(requestId: number, approverId: number)
  * Migra masivamente a un grupo de comensales a un nuevo comedor.
  * 
  * @param dinerIds Arreglo de IDs de los comensales a mover.
- * @param targetDiningRoomId ID del comedor destino.
+ * @param targetSiteId ID de la sede destino.
  */
-export async function bulkMigrate(dinerIds: number[], targetDiningRoomId: number) {
+export async function bulkMigrate(dinerIds: number[], targetSiteId: number) {
   if (!dinerIds || dinerIds.length === 0) {
     throw new Error('ValidationError: Debe proveer al menos un comensal para migrar.')
   }
-  if (!targetDiningRoomId) {
-    throw new Error('ValidationError: Debe especificar un comedor destino.')
+  if (!targetSiteId) {
+    throw new Error('ValidationError: Debe especificar una sede destino.')
   }
 
   // Delegar al repositorio la actualización masiva
-  const result = await dinerRepo.updateDiningRoomBulk(dinerIds, targetDiningRoomId)
+  const result = await dinerRepo.updateSiteBulk(dinerIds, targetSiteId)
   
   // Emitir evento por si otros sistemas necesitan reaccionar
-  emitEvent('diner:migratedBulk', { count: result.count, targetDiningRoomId })
+  emitEvent('diner:migratedBulk', { count: result.count, targetSiteId })
 
   return result
 }
@@ -124,7 +124,7 @@ export async function importDinersFromExcel(rows: Array<any>, user: any) {
   const uniqueAreas = [...new Set(rows.map(r => r.areaName))]
   const uniquePositions = [...new Set(rows.filter(r => r.positionName).map(r => r.positionName))]
   const uniqueSquads = [...new Set(rows.map(r => r.squadName))]
-  const uniqueWarehouses = [...new Set(rows.map(r => r.comedorName))]
+  const uniqueSites = [...new Set(rows.map(r => r.sedeName || r.comedorName))]
 
   // A. Resolver Cargos (Positions)
   const positionMap = new Map<string, number>()
@@ -181,20 +181,19 @@ export async function importDinersFromExcel(rows: Array<any>, user: any) {
     areaMap.set((areaName as string).toUpperCase(), subdep.id)
   }
 
-  // D. Resolver Comedores (Warehouses)
-  const warehouseMap = new Map<string, number>()
-  for (const wName of uniqueWarehouses) {
-    if (!wName) {
-      throw new ValidationError(`La columna Comedor es obligatoria en todas las filas.`)
+  // D. Resolver Sedes (Sites)
+  const siteMap = new Map<string, number>()
+  for (const sName of uniqueSites) {
+    if (!sName) {
+      throw new ValidationError(`La columna Sede Base es obligatoria en todas las filas.`)
     }
-    const warehouse = await prisma.warehouse.findFirst({
-      where: { name: { equals: wName as string, mode: 'insensitive' },
-      type:'LOCAL' }
+    const site = await prisma.site.findFirst({
+      where: { name: { equals: sName as string, mode: 'insensitive' } }
     })
-    if (!warehouse) {
-      throw new ValidationError(`El comedor '${wName}' no existe en el sistema. Asegúrate de escribirlo correctamente.`)
+    if (!site) {
+      throw new ValidationError(`La sede '${sName}' no existe en el sistema. Asegúrate de escribirla correctamente.`)
     }
-    warehouseMap.set((wName as string).toUpperCase(), warehouse.id)
+    siteMap.set((sName as string).toUpperCase(), site.id)
   }
 
   // 3. Procesar en lote (Upsert por cada trabajador)
@@ -204,10 +203,10 @@ export async function importDinersFromExcel(rows: Array<any>, user: any) {
     for (const row of rows) {
       const posId = row.positionName ? positionMap.get(String(row.positionName).toUpperCase()) : null
       const sqId = squadMap.get(String(row.squadName).toUpperCase())
-      const wId = warehouseMap.get(String(row.comedorName).toUpperCase())
+      const sId = siteMap.get(String(row.sedeName || row.comedorName).toUpperCase())
       const subId = areaMap.get(String(row.areaName).toUpperCase())
 
-      if (!sqId || !wId || !subId) continue // Salvaguarda
+      if (!sqId || !sId || !subId) continue // Salvaguarda
 
       const upsertedDiner = await tx.diner.upsert({
         where: { cedula: row.cedula },
@@ -216,7 +215,7 @@ export async function importDinersFromExcel(rows: Array<any>, user: any) {
           rationType: row.rationType,
           squadId: sqId,
           subdependencyId: subId,
-          warehouseId: wId,
+          siteId: sId,
           positionId: posId || null,
           active: true // Si estaba inactivo, el Excel lo revive
         },
@@ -226,7 +225,7 @@ export async function importDinersFromExcel(rows: Array<any>, user: any) {
           rationType: row.rationType,
           squadId: sqId,
           subdependencyId: subId,
-          warehouseId: wId,
+          siteId: sId,
           positionId: posId || null,
           active: true
         },

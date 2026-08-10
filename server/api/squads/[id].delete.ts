@@ -10,5 +10,10 @@ export default defineApiHandler(async (event) => {
   const id = Number(event.context.params?.id)
   if (!id) throw new ValidationError('ID inválido')
 
+  const count = await dependencyRepo.countActiveDinersBySquad(id)
+  if (count > 0) {
+    throw new ValidationError(`No se puede desactivar la Cuadrilla porque tiene ${count} comensal(es) activo(s).`)
+  }
+
   return await dependencyRepo.deleteSquad(id)
 })

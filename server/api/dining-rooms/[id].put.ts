@@ -10,11 +10,11 @@ export default defineApiHandler(async (event) => {
   if (!id) throw createError({ statusCode: 400, message: 'ID de comedor inválido' })
 
   const body = await readBody(event)
-  if (!body.name) {
-    throw createError({ statusCode: 400, message: 'El nombre del comedor es requerido' })
+  if (!body.name || !body.siteId) {
+    throw createError({ statusCode: 400, message: 'El nombre del comedor y la sede son requeridos' })
   }
 
-  const updated = await repo.updateDiningRoom(id, body.name, body.active)
+  const updated = await repo.updateDiningRoom(id, body.name, Number(body.siteId), body.active)
 
   await logAudit(userId, 'ACTUALIZAR', 'COMEDOR', updated.id, `Comedor actualizado: ${updated.name}`)
 

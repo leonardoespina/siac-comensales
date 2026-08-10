@@ -2,8 +2,11 @@ import { prisma } from '../utils/prisma'
 import { Prisma } from '@prisma/client'
 
 export const positionRepository = {
-  async findAll() {
+  async findAll(includeInactive: boolean = false) {
     return prisma.position.findMany({
+      where: {
+        ...(includeInactive ? {} : { active: true })
+      },
       orderBy: { name: 'asc' }
     })
   },
@@ -38,15 +41,16 @@ export const positionRepository = {
   async delete(id: number) {
     // Check if diners are using this position
     const dinersCount = await prisma.diner.count({
-      where: { positionId: id }
+      where: { positionId: id, active: true }
     })
 
     if (dinersCount > 0) {
       throw new Error(`Cannot delete position. It is assigned to ${dinersCount} diners.`)
     }
 
-    return prisma.position.delete({
-      where: { id }
+    return prisma.position.update({
+      where: { id },
+      data: { active: false }
     })
   }
 }

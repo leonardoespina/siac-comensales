@@ -52,6 +52,11 @@ const auth = useAuthStore()
     >
       <q-list class="q-pl-lg">
         <!-- Catálogos Organizacionales -->
+        <q-item clickable v-ripple to="/diners/sites" active-class="text-primary" v-if="auth.hasPermission('SITES', 'canRead')">
+          <q-item-section avatar><q-icon name="domain" size="sm" /></q-item-section>
+          <q-item-section>Gestión de Sedes</q-item-section>
+        </q-item>
+
         <q-item clickable v-ripple to="/diners/dining-rooms" active-class="text-primary" v-if="auth.hasPermission('DINING_ROOMS', 'canRead')">
           <q-item-section avatar><q-icon name="restaurant" size="sm" /></q-item-section>
           <q-item-section>Gestión de Comedores</q-item-section>

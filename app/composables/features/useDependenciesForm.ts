@@ -114,6 +114,38 @@ export function useDependenciesForm() {
     })
   }
 
+  const confirmRestoreDep = (id: number, name: string) => {
+    $q.dialog({
+      title: 'Confirmar Restauración',
+      message: `¿Está seguro de restaurar la dependencia "${name}"?`,
+      cancel: true,
+      persistent: true
+    }).onOk(async () => {
+      try {
+        await store.restoreDependency(id)
+        $q.notify({ type: 'positive', message: 'Dependencia restaurada' })
+      } catch (error: any) {
+        $q.notify({ type: 'negative', message: error.data?.message || 'Error al restaurar' })
+      }
+    })
+  }
+
+  const confirmRestoreSub = (id: number, name: string) => {
+    $q.dialog({
+      title: 'Confirmar Restauración',
+      message: `¿Está seguro de restaurar la subdependencia "${name}"?`,
+      cancel: true,
+      persistent: true
+    }).onOk(async () => {
+      try {
+        await store.restoreSubdependency(id)
+        $q.notify({ type: 'positive', message: 'Subdependencia restaurada' })
+      } catch (error: any) {
+        $q.notify({ type: 'negative', message: error.data?.message || 'Error al restaurar' })
+      }
+    })
+  }
+
   return {
     showDepDialog,
     isEditingDep,
@@ -130,6 +162,8 @@ export function useDependenciesForm() {
     submitDependency,
     submitSubdependency,
     confirmDeleteDep,
-    confirmDeleteSub
+    confirmDeleteSub,
+    confirmRestoreDep,
+    confirmRestoreSub
   }
 }

@@ -4,7 +4,7 @@ import { useSquadsStore } from "~/stores/squads";
 import { useDinersStore } from "~/stores/diners";
 import { useDependenciesStore } from "~/stores/dependencies";
 import { usePositionsStore } from "~/stores/positions";
-import { useDiningRoomsStore } from "~/stores/diningRooms";
+import { useSitesStore } from "~/stores/sites";
 import { useAuthStore } from "~/stores/auth";
 import { useQuasar } from "quasar";
 import { useWorkerForm } from "~/composables/features/useWorkerForm";
@@ -20,7 +20,7 @@ const squadsStore = useSquadsStore();
 const dinersStore = useDinersStore();
 const depStore = useDependenciesStore();
 const positionsStore = usePositionsStore();
-const diningRoomsStore = useDiningRoomsStore();
+const sitesStore = useSitesStore();
 const authStore = useAuthStore();
 
 const { showDialog, isEdit, formData, openDialog, openEditDialog, submit } =
@@ -57,7 +57,7 @@ const {
   rationOptions,
   squadOptions,
   positionOptions,
-  diningRoomOptions,
+  siteOptions,
   dependencyOptions,
   smartFilterSchema,
   filterSubdependencyOptions,
@@ -76,7 +76,7 @@ const openExcelModal = () => {
 onMounted(() => {
   squadsStore.fetchAll();
   positionsStore.fetchPositions();
-  diningRoomsStore.fetchAll();
+  sitesStore.fetchSites();
   depStore.fetchAll();
 
   // Solo cargamos los comensales automáticamente si NO es un Admin Global puro
@@ -402,11 +402,11 @@ onMounted(() => {
             clearable
           />
           <q-select
-            v-model="formData.diningRoomId"
-            :options="diningRoomOptions"
+            v-model="formData.siteId"
+            :options="siteOptions"
             emit-value
             map-options
-            label="Comedor Base *"
+            label="Sede Base *"
             outlined
             dense
           />

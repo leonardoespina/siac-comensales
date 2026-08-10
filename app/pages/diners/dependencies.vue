@@ -28,7 +28,9 @@ const {
   submitDependency,
   submitSubdependency,
   confirmDeleteDep,
-  confirmDeleteSub
+  confirmDeleteSub,
+  confirmRestoreDep,
+  confirmRestoreSub
 } = useDependenciesForm()
 
 const depOptions = computed(() => {
@@ -102,7 +104,10 @@ onMounted(() => {
                   </q-item-section>
 
                   <q-item-section>
-                    <div class="text-weight-bold">{{ dep.name }}</div>
+                    <div class="text-weight-bold" :class="{'text-strike text-grey-6': dep.active === false}">
+                      {{ dep.name }}
+                      <q-badge v-if="dep.active === false" color="negative" class="q-ml-sm" label="ELIMINADO" />
+                    </div>
                   </q-item-section>
 
                   <q-item-section v-if="canUpdate || canDelete" side>
@@ -110,8 +115,11 @@ onMounted(() => {
                       <q-btn v-if="canUpdate" flat round icon="edit" color="primary" size="sm" @click.stop="openEditDep(dep)">
                         <q-tooltip>Editar Dependencia</q-tooltip>
                       </q-btn>
-                      <q-btn v-if="canDelete" flat round icon="delete" color="negative" size="sm" @click.stop="confirmDeleteDep(dep.id, dep.name)">
+                      <q-btn v-if="canDelete && dep.active !== false" flat round icon="delete" color="negative" size="sm" @click.stop="confirmDeleteDep(dep.id, dep.name)">
                         <q-tooltip>Eliminar Dependencia</q-tooltip>
+                      </q-btn>
+                      <q-btn v-if="canUpdate && dep.active === false" flat round icon="restore" color="positive" size="sm" @click.stop="confirmRestoreDep(dep.id, dep.name)">
+                        <q-tooltip>Activar Dependencia</q-tooltip>
                       </q-btn>
                     </div>
                   </q-item-section>
@@ -123,7 +131,10 @@ onMounted(() => {
                       <q-icon name="subdirectory_arrow_right" />
                     </q-item-section>
                     <q-item-section>
-                      <q-item-label>{{ sub.name }}</q-item-label>
+                      <q-item-label :class="{'text-strike text-grey-6': sub.active === false}">
+                        {{ sub.name }}
+                        <q-badge v-if="sub.active === false" color="negative" outline class="q-ml-sm" label="ELIMINADO" />
+                      </q-item-label>
                       <q-item-label caption>{{ getUniqueSquadsCount(sub) }} cuadrillas activas</q-item-label>
                     </q-item-section>
                     
@@ -132,8 +143,11 @@ onMounted(() => {
                         <q-btn v-if="canUpdate" flat round icon="edit" color="primary" size="sm" @click.stop="openEditSub(sub)">
                           <q-tooltip>Editar Subdependencia</q-tooltip>
                         </q-btn>
-                        <q-btn v-if="canDelete" flat round icon="delete" color="negative" size="sm" @click.stop="confirmDeleteSub(sub.id, sub.name)">
+                        <q-btn v-if="canDelete && sub.active !== false" flat round icon="delete" color="negative" size="sm" @click.stop="confirmDeleteSub(sub.id, sub.name)">
                           <q-tooltip>Eliminar Subdependencia</q-tooltip>
+                        </q-btn>
+                        <q-btn v-if="canUpdate && sub.active === false" flat round icon="restore" color="positive" size="sm" @click.stop="confirmRestoreSub(sub.id, sub.name)">
+                          <q-tooltip>Activar Subdependencia</q-tooltip>
                         </q-btn>
                       </div>
                     </q-item-section>

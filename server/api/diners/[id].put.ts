@@ -20,9 +20,9 @@ export default defineApiHandler(async (event) => {
     throw new ValidationError('ID de comensal inválido')
   }
 
-  const diningRoomId = Number(body.diningRoomId)
-  if (body.diningRoomId && isNaN(diningRoomId)) {
-    throw new ValidationError('ID de comedor inválido')
+  const siteId = Number(body.siteId)
+  if (body.siteId && isNaN(siteId)) {
+    throw new ValidationError('La sede no es válida')
   }
 
   // 2. Obtener el comensal actual
@@ -80,7 +80,7 @@ export default defineApiHandler(async (event) => {
     rationType: body.rationType,
     squadId: body.squadId ? Number(body.squadId) : undefined,
     subdependencyId: finalSubdependencyId,
-    diningRoomId: diningRoomId || undefined,
+    siteId: siteId || undefined,
     positionId: body.positionId ? Number(body.positionId) : undefined
   })
 

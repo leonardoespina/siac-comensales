@@ -12,36 +12,38 @@ import type { Prisma } from '@prisma/client'
 
 // --- COMENSALES (DINERS) ---
 
-export async function getDinersBySubdependency(subdependencyId: number, squadId?: number) {
+export async function getDinersBySubdependency(subdependencyId: number, squadId?: number, includeInactive: boolean = false, allowedSiteIds?: number[]) {
   return prisma.diner.findMany({
     where: { 
       subdependencyId,
       ...(squadId && { squadId }),
-      active: true 
+      ...(includeInactive ? {} : { active: true }),
+      ...(allowedSiteIds && allowedSiteIds.length > 0 ? { siteId: { in: allowedSiteIds } } : {})
     },
     include: {
       squad: true,
       position: true,
-      diningRoom: true,
+      site: true,
       biometricRecord: true
     },
     orderBy: { id: 'desc' }
   })
 }
 
-export async function getDinersByDependency(dependencyId: number) {
+export async function getDinersByDependency(dependencyId: number, includeInactive: boolean = false, allowedSiteIds?: number[]) {
   return prisma.diner.findMany({
     where: { 
       subdependency: {
         dependencyId: dependencyId
       },
-      active: true 
+      ...(includeInactive ? {} : { active: true }),
+      ...(allowedSiteIds && allowedSiteIds.length > 0 ? { siteId: { in: allowedSiteIds } } : {})
     },
     include: {
       squad: true,
       subdependency: true,
       position: true,
-      diningRoom: true,
+      site: true,
       biometricRecord: true
     },
     orderBy: { id: 'desc' }
@@ -66,31 +68,31 @@ export async function getDinerByCedula(cedula: string) {
     include: {
       squad: true,
       position: true,
-      diningRoom: true,
+      site: true,
       biometricRecord: true
     }
   })
 }
 
-export async function createDiner(data: { cedula: string, name: string, rationType: string, squadId: number, subdependencyId: number, positionId?: number, diningRoomId?: number }) {
+export async function createDiner(data: { cedula: string, name: string, rationType: string, squadId: number, subdependencyId: number, positionId?: number, siteId?: number }) {
   return prisma.diner.create({
     data,
     include: {
       position: true,
       squad: true,
-      diningRoom: true
+      site: true
     }
   })
 }
 
-export async function updateDiner(id: number, data: { cedula?: string, name?: string, rationType?: string, squadId?: number, subdependencyId?: number, positionId?: number, diningRoomId?: number }) {
+export async function updateDiner(id: number, data: { cedula?: string, name?: string, rationType?: string, squadId?: number, subdependencyId?: number, positionId?: number, siteId?: number }) {
   return prisma.diner.update({
     where: { id },
     data,
     include: {
       position: true,
       squad: true,
-      diningRoom: true
+      site: true
     }
   })
 }
@@ -106,14 +108,15 @@ export async function deleteDiner(id: number) {
 export async function saveBiometricRecord(dinerId: number, templates: string[]) {
   return prisma.biometricRecord.upsert({
     where: { dinerId },
-    update: { templates },
-    create: { dinerId, templates }
+    update: { templates, active: true },
+    create: { dinerId, templates, active: true }
   })
 }
 
 export async function clearBiometricRecord(dinerId: number) {
-  return prisma.biometricRecord.delete({
-    where: { dinerId }
+  return prisma.biometricRecord.update({
+    where: { dinerId },
+    data: { active: false }
   })
 }
 
@@ -219,14 +222,14 @@ export async function updateRequestStatus(id: number, status: string, approvedBy
 
 // --- MIGRACIÓN MASIVA (BULK ACTIONS) ---
 
-export async function updateDiningRoomBulk(dinerIds: number[], targetDiningRoomId: number, tx?: any) {
+export async function updateSiteBulk(dinerIds: number[], targetSiteId: number, tx?: any) {
   const db = tx || prisma
   return db.diner.updateMany({
     where: {
       id: { in: dinerIds }
     },
     data: {
-      diningRoomId: targetDiningRoomId
+      siteId: targetSiteId
     }
   })
 }

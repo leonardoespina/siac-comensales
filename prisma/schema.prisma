@@ -84,9 +84,8 @@ model User {
 
 
 
-  // Aislamiento por Comedor
-  diningRoomId Int?        @map("dining_room_id")
-  diningRoom   DiningRoom? @relation(fields: [diningRoomId], references: [id], onDelete: Restrict)
+  // Aislamiento por Sede (Soporte Multi-Sede M:N)
+  sites Site[] @relation("UserSites")
 
   // Aislamiento por Dependencia (Para Gerentes, Autoridad sobre todas las subdependencias)
   dependencyId Int?        @map("dependency_id")
@@ -107,8 +106,6 @@ model User {
   approvedDinerRequests DinerRequest[] @relation("DinerRequestsApproved")
 
   @@index([roleId])
-
-  @@index([diningRoomId])
   @@index([dependencyId])
   @@index([subdependencyId])
   @@map("users")
@@ -156,16 +153,32 @@ model Notification {
 
 // ── MÓDULO COMENSALES (ESTRUCTURA ORGANIZACIONAL) ─────────────────────────
 
+model Site {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique // Ej: "PLC", "MSB"
+  description String?
+  active      Boolean @default(true)
+
+  diningRooms DiningRoom[]
+  diners      Diner[]
+  users       User[]       @relation("UserSites")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("sites")
+}
+
 model DiningRoom {
   id     Int     @id @default(autoincrement())
   name   String  @unique
   active Boolean @default(true)
 
+  siteId Int   @map("site_id")
+  site   Site  @relation(fields: [siteId], references: [id], onDelete: Restrict)
 
 
-  diners        Diner[]
   dinerRequests DinerRequest[]
-  users         User[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
@@ -250,9 +263,9 @@ model Diner {
   positionId Int?      @map("position_id")
   position   Position? @relation(fields: [positionId], references: [id], onDelete: SetNull)
 
-  // Comedor Base asignado al trabajador
-  diningRoomId Int?        @map("dining_room_id")
-  diningRoom   DiningRoom? @relation(fields: [diningRoomId], references: [id], onDelete: SetNull)
+  // Sede Base asignada al trabajador
+  siteId Int?        @map("site_id")
+  site   Site?       @relation(fields: [siteId], references: [id], onDelete: SetNull)
 
   fingerprint String? @db.Text // TODO: Eliminar en futura migración cuando todos usen BiometricRecord
   qrCode      String? @unique @map("qr_code")
@@ -266,7 +279,7 @@ model Diner {
   @@index([subdependencyId])
   @@index([squadId])
   @@index([positionId])
-  @@index([diningRoomId])
+  @@index([siteId])
   @@map("diners")
 }
 

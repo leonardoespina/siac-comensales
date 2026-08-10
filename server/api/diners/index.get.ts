@@ -45,12 +45,14 @@ export default defineApiHandler(async (event) => {
   }
 
   // 2. Ejecutar la búsqueda basada en los filtros ya seguros
+  const allowedSiteIds = isGlobal ? undefined : (user.siteIds || [])
+
   if (targetSubdependency) {
-    return await dinerRepo.getDinersBySubdependency(targetSubdependency)
+    return await dinerRepo.getDinersBySubdependency(targetSubdependency, undefined, isGlobal, allowedSiteIds)
   }
   
   if (targetDependency) {
-    return await dinerRepo.getDinersByDependency(targetDependency)
+    return await dinerRepo.getDinersByDependency(targetDependency, isGlobal, allowedSiteIds)
   }
 
   // Si no hay filtros válidos (ej. un admin global que entra por primera vez sin filtrar), devolvemos vacío

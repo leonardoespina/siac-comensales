@@ -1,16 +1,21 @@
 <template>
   <q-page padding>
-    <div class="text-h4 text-weight-bold q-mb-md text-primary">Gestión de Comedores</div>
+    <div class="text-h4 text-weight-bold q-mb-md text-primary">Gestión de Sedes</div>
 
     <SharedCrudTable
-      title="Comedores"
+      title="Sedes"
       :columns="columns"
-      :rows="store.diningRooms"
+      :rows="store.sites"
       :filter="filter"
-      :loading="store.isLoading"
+      :loading="store.loading"
       @update:filter="filter = $event"
       @add="openCreate"
     >
+      <template v-slot:body-cell-description="props">
+        <q-td :props="props">
+          <span class="text-caption text-grey-8">{{ props.row.description || 'Sin descripción' }}</span>
+        </q-td>
+      </template>
 
       <template v-slot:body-cell-status="props">
         <q-td :props="props">
@@ -28,36 +33,31 @@
 
     <SharedFormDialog
       v-model="isDialogOpen"
-      :title="isEditing ? 'Editar Comedor' : 'Nuevo Comedor'"
+      :title="isEditing ? 'Editar Sede' : 'Nueva Sede'"
       @save="submit"
     >
       <q-input
         v-model="form.name"
-        label="Nombre del Comedor *"
+        label="Nombre de la Sede *"
         outlined
         dense
         autofocus
         :rules="[val => !!val || 'El nombre es requerido']"
       />
-      
-      <q-select
-        v-model="form.siteId"
-        :options="sitesStore.sites"
-        option-value="id"
-        option-label="name"
-        emit-value
-        map-options
-        label="Sede *"
+
+      <q-input
+        v-model="form.description"
+        label="Descripción (Opcional)"
+        type="textarea"
         outlined
         dense
         class="q-mt-md"
-        :rules="[val => !!val || 'La Sede es requerida']"
       />
 
       <q-toggle
         v-if="isEditing"
         v-model="form.active"
-        label="Comedor Activo"
+        label="Sede Activa"
         class="q-mt-md"
       />
     </SharedFormDialog>
@@ -66,28 +66,22 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useDiningRoomsStore } from '~/stores/diningRooms'
 import { useSitesStore } from '~/stores/sites'
-import { useDiningRoomForm } from '~/composables/features/useDiningRoomForm'
+import { useSiteForm } from '~/composables/features/useSiteForm'
 
-const store = useDiningRoomsStore()
-const sitesStore = useSitesStore()
-
-const { isDialogOpen, isEditing, form, openCreate, openEdit, submit, remove } = useDiningRoomForm()
+const store = useSitesStore()
+const { isDialogOpen, isEditing, form, openCreate, openEdit, submit, remove } = useSiteForm()
 
 const filter = ref('')
 
-
-
 const columns = [
-  { name: 'name', label: 'Nombre del Comedor', field: 'name', align: 'left' as const, sortable: true },
-  { name: 'site', label: 'Sede', field: (row: any) => row.site?.name, align: 'left' as const, sortable: true },
+  { name: 'name', label: 'Nombre de la Sede', field: 'name', align: 'left' as const, sortable: true },
+  { name: 'description', label: 'Descripción', field: 'description', align: 'left' as const, sortable: true },
   { name: 'status', label: 'Estado', field: 'active', align: 'center' as const, sortable: true },
   { name: 'actions', label: 'Acciones', align: 'right' as const }
 ]
 
 onMounted(() => {
-  store.fetchAll()
-  sitesStore.fetchSites()
+  store.fetchSites()
 })
 </script>

@@ -102,34 +102,29 @@ const columns = [
 
 const CATEGORIES = {
   DINERS: {
-    label: '🧑‍🤝‍🧑 Gestión de Comensales',
-    codes: ['DINERS', 'DINERS_REQUESTS', 'DISPATCH', 'MY_SQUADS']
+    label: '🧑‍🤝‍🧑 Gestión de Comensales y Peticiones',
+    codes: ['DINERS', 'DINERS_REQUESTS', 'MY_SQUADS']
   },
-  WAREHOUSE: {
-    label: '📦 Almacén y Operaciones',
-    codes: ['RECEPTIONS', 'TRANSFERS', 'OPERATIONS', 'APPROVAL_RECEPTIONS', 'APPROVAL_TRANSFERS']
+  CATALOGS: {
+    label: '📋 Catálogos Base del Comedor',
+    codes: ['SITES', 'DINING_ROOMS', 'SQUADS', 'POSITIONS']
   },
   REPORTS: {
     label: '📑 Reportes del Sistema',
-    codes: ['REPORT_DASHBOARD', 'REPORT_VALUE', 'REPORT_ALERTS', 'REPORT_MINMAX', 'REPORT_CONSUMPTIONS', 'REPORT_EVOLUTION', 'REPORT_INSTITUTIONS', 'REPORT_SHIFTS', 'REPORT_RECEPTIONS']
-  },
-  INVENTORY: {
-    label: '📋 Catálogos Base (Inventario)',
-    codes: ['PRODUCTS', 'CATEGORIES', 'UNITS', 'WAREHOUSES', 'SUPPLIERS', 'INSTITUTIONS']
+    codes: ['REPORT_DASHBOARD']
   },
   SECURITY: {
     label: '⚙️ Seguridad y Estructura Organizacional',
-    codes: ['SECURITY', 'BIOMETRIC', 'DINING_ROOMS', 'DEPENDENCIES', 'SQUADS', 'POSITIONS', 'AUDIT', 'GLOBAL_ACCESS']
+    codes: ['SECURITY', 'BIOMETRIC', 'DEPENDENCIES', 'AUDIT', 'GLOBAL_ACCESS']
   }
 }
 
 const groupedPermissions = computed(() => {
   const groups: Record<string, any[]> = {
     DINERS: [],
-    WAREHOUSE: [],
-    INVENTORY: [],
-    SECURITY: [],
+    CATALOGS: [],
     REPORTS: [],
+    SECURITY: [],
     OTHER: []
   }
 

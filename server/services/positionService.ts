@@ -2,8 +2,8 @@ import { positionRepository } from '../repository/positionRepository'
 import { createError } from 'h3'
 
 export const positionService = {
-  async getAllPositions() {
-    return positionRepository.findAll()
+  async getAllPositions(includeInactive: boolean = false) {
+    return positionRepository.findAll(includeInactive)
   },
 
   async createPosition(data: { name: string; active?: boolean }) {

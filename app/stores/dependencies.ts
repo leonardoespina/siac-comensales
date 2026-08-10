@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 export interface DependencyNode {
   id: number
   name: string
+  active?: boolean
   subdependencies?: SubdependencyNode[]
 }
 
@@ -10,6 +11,7 @@ export interface SubdependencyNode {
   id: number
   name: string
   dependencyId: number
+  active?: boolean
 }
 
 export const useDependenciesStore = defineStore('dependencies', {
@@ -73,6 +75,20 @@ export const useDependenciesStore = defineStore('dependencies', {
     async deleteSubdependency(id: number) {
       await $fetch(`/api/dependencies/${id}?type=subdependency`, {
         method: 'DELETE'
+      })
+      await this.fetchAll()
+    },
+
+    async restoreDependency(id: number) {
+      await $fetch(`/api/dependencies/${id}?type=dependency&action=restore`, {
+        method: 'PATCH'
+      })
+      await this.fetchAll()
+    },
+
+    async restoreSubdependency(id: number) {
+      await $fetch(`/api/dependencies/${id}?type=subdependency&action=restore`, {
+        method: 'PATCH'
       })
       await this.fetchAll()
     }
