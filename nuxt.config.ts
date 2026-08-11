@@ -1,6 +1,7 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   ssr: false,
+  telemetry: false,
 
   modules: [
     '@vite-pwa/nuxt',
@@ -96,9 +97,17 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-me',
+    databaseUrl: process.env.DATABASE_URL,
     public: {
       appName: 'SIAC',
     },
+  },
+
+  nitro: {
+    externals: {
+      inline: ['pg', 'pg-pool', 'pg-protocol', 'pg-types', 'pg-int8',
+        'pg-connection-string', 'pgpass', '@prisma/adapter-pg']
+    }
   },
 
   compatibilityDate: '2025-06-09',
