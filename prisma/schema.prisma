@@ -30,6 +30,19 @@ datasource db {
   provider = "postgresql"
 }
 
+// ── CONFIGURACIONES GLOBALES ─────────────────────────────────────────────────
+model SystemSetting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique // Ej: "REQUEST_CUTOFF_TIME", "REQUEST_MIN_DAYS_AHEAD"
+  value     String   @db.Text
+  description String?
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
 // ── ROLES Y PERMISOS DINÁMICOS ──────────────────────────────────────────────
 
 model Role {
@@ -288,8 +301,11 @@ model DinerRequest {
   date      DateTime @db.Date
   shiftType String   @map("shift_type") // DESAYUNO, ALMUERZO, CENA, SOBRECENA
   status    String   @default("PENDING") // PENDING, APPROVED, REJECTED
-  // AQUÍ VA LA LÍNEA NUEVA PARA LAS VISITAS EXTRAORDINARIAS:
+  
+  // Código único para identificar un bloque de solicitudes enviadas simultáneamente
+  batchCode String?  @map("batch_code")
 
+  // AQUÍ VA LA LÍNEA NUEVA PARA LAS VISITAS EXTRAORDINARIAS:
   isExtraordinary Boolean @default(false) @map("is_extraordinary")
 
   createdById Int  @map("created_by_id")

@@ -12,10 +12,11 @@ import type { Prisma } from '@prisma/client'
 
 // --- DEPENDENCIAS ---
 
-export async function getAllDependencies(includeInactive: boolean = false) {
+export async function getAllDependencies(includeInactive: boolean = false, filterByDependencyId?: number | null) {
   return prisma.dependency.findMany({
     where: {
-      ...(includeInactive ? {} : { active: true })
+      ...(includeInactive ? {} : { active: true }),
+      ...(filterByDependencyId ? { id: filterByDependencyId } : {})
     },
     include: {
       subdependencies: {

@@ -122,7 +122,8 @@ onMounted(() => {
               <template
                 v-if="
                   authStore.hasPermission('GLOBAL_ACCESS', 'canRead') &&
-                  !authStore.user?.subdependencyId
+                  !authStore.user?.subdependencyId &&
+                  !authStore.user?.dependencyId
                 "
               >
                 <div class="col-12 col-md-4">
@@ -139,6 +140,10 @@ onMounted(() => {
                     clearable
                   />
                 </div>
+              </template>
+
+              <!-- El filtro de Subdependencia lo deben ver los Globales y los Gerentes Generales (que no tienen subdependencia asignada) -->
+              <template v-if="!authStore.user?.subdependencyId">
                 <div class="col-12 col-md-4">
                   <q-select
                     v-model="filterSubdependencyId"
@@ -151,14 +156,13 @@ onMounted(() => {
                     outlined
                     dense
                     clearable
-                    :disable="!filterDependencyId"
+                    :disable="authStore.hasPermission('GLOBAL_ACCESS', 'canRead') && !authStore.user?.dependencyId && !filterDependencyId"
                   />
                 </div>
               </template>
 
               <div
                 :class="
-                  authStore.hasPermission('GLOBAL_ACCESS', 'canRead') &&
                   !authStore.user?.subdependencyId
                     ? 'col-12 col-md-4'
                     : 'col-12 col-md-4 offset-md-8'

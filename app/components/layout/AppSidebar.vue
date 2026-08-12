@@ -57,9 +57,19 @@ const auth = useAuthStore()
           <q-item-section>Gestión de Sedes</q-item-section>
         </q-item>
 
+        <q-item clickable v-ripple to="/diners/requests" active-class="text-primary" v-if="auth.hasPermission('DINERS_REQUESTS', 'canRead')">
+          <q-item-section avatar><q-icon name="assignment" size="sm" /></q-item-section>
+          <q-item-section>Solicitudes de Comedor</q-item-section>
+        </q-item>
+
         <q-item clickable v-ripple to="/diners/dining-rooms" active-class="text-primary" v-if="auth.hasPermission('DINING_ROOMS', 'canRead')">
           <q-item-section avatar><q-icon name="restaurant" size="sm" /></q-item-section>
           <q-item-section>Gestión de Comedores</q-item-section>
+        </q-item>
+
+        <q-item clickable v-ripple to="/security/meal-schedules" active-class="text-primary" v-if="auth.hasPermission('MEAL_SCHEDULES', 'canRead') || auth.hasPermission('GLOBAL_ACCESS', 'canRead')">
+          <q-item-section avatar><q-icon name="schedule" size="sm" /></q-item-section>
+          <q-item-section>Horarios de Comedor</q-item-section>
         </q-item>
 
         <q-item clickable v-ripple to="/diners/squad-catalog" active-class="text-primary" v-if="auth.hasPermission('SQUADS', 'canCreate') || auth.hasPermission('SQUADS', 'canRead')">
@@ -95,6 +105,11 @@ const auth = useAuthStore()
         <q-item clickable v-ripple to="/security/audit" active-class="text-primary" v-if="auth.hasPermission('AUDIT', 'canRead')">
           <q-item-section avatar><q-icon name="history" size="sm" /></q-item-section>
           <q-item-section>Auditoría</q-item-section>
+        </q-item>
+
+        <q-item clickable v-ripple to="/security/settings" active-class="text-primary" v-if="auth.hasPermission('SECURITY', 'canUpdate')">
+          <q-item-section avatar><q-icon name="settings" size="sm" /></q-item-section>
+          <q-item-section>Configuraciones Globales</q-item-section>
         </q-item>
       </q-list>
     </q-expansion-item>

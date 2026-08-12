@@ -4,5 +4,12 @@ import * as dependencyRepo from '../../repository/dependencyRepository'
 
 export default defineApiHandler(async (event) => {
   const user = await requireUserContext(event)
-  return await dependencyRepo.getAllDependencies(user.isGlobal)
+  
+  // Si el usuario tiene una Dependencia Principal asignada, ESTÁ RESTRINGIDO a ella,
+  // sin importar si su rol dice "GLOBAL_ACCESS". El GLOBAL_ACCESS en este contexto
+  // significa que es "Global" dentro de su dependencia (acceso a todas sus subdependencias).
+  // Si NO tiene dependencia asignada (es nula) y su rol es Global, entonces sí ve toda la empresa.
+  const filterByDependencyId = user.dependencyId ? user.dependencyId : null
+
+  return await dependencyRepo.getAllDependencies(false, filterByDependencyId)
 })

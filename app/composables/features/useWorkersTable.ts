@@ -96,8 +96,10 @@ export function useWorkersTable(formDataDependencyId: any) {
 
   // Opciones de subdependencia para los filtros de la tabla
   const filterSubdependencyOptions = computed(() => {
-    if (!filterDependencyId.value) return []
-    const dep = depStore.dependencies.find(d => d.id === filterDependencyId.value)
+    // Usamos el filtro global si existe, si no, usamos la dependencia asignada al usuario
+    const targetDepId = filterDependencyId.value || authStore.user?.dependencyId
+    if (!targetDepId) return []
+    const dep = depStore.dependencies.find(d => d.id === targetDepId)
     return (dep?.subdependencies || []).filter((sub: any) => sub.active !== false)
   })
 

@@ -64,8 +64,30 @@ export const mealScheduleService = {
   },
 
   async updateSchedule(id: number, data: any) {
-    // Para simplificar: No permitimos cambiar la hora de un turno activo que choque. 
-    // Lo ideal es que el admin desactive el viejo y cree uno nuevo, o aplicar la misma lógica anti-colisión aquí.
+    if (data.startTime && data.endTime) {
+      const startMins = timeToMinutes(data.startTime)
+      let endMins = timeToMinutes(data.endTime)
+      if (endMins <= startMins) endMins += 1440
+
+      const allSchedules = await mealScheduleRepository.findAll()
+      
+      for (const sched of allSchedules) {
+        // Ignorar el mismo horario que estamos editando
+        if (sched.id !== id && sched.active) {
+          const existStart = timeToMinutes(sched.startTime)
+          let existEnd = timeToMinutes(sched.endTime)
+          if (existEnd <= existStart) existEnd += 1440
+
+          if (startMins < existEnd && endMins > existStart) {
+            throw createError({ 
+              statusCode: 400, 
+              statusMessage: `Error: Tu nuevo horario colisiona con el turno de ${sched.shiftType} (${sched.startTime} a ${sched.endTime})` 
+            })
+          }
+        }
+      }
+    }
+
     return mealScheduleRepository.update(id, data)
   },
 
