@@ -13,7 +13,7 @@ export default defineApiHandler(async (event) => {
   if (!body.name) throw new ValidationError('El nombre es obligatorio')
 
   if (body.type === 'subdependency') {
-    return await dependencyRepo.updateSubdependency(id, body.name, body.dependencyId ? Number(body.dependencyId) : undefined)
+    return await dependencyRepo.updateSubdependency(id, body.name, body.dependencyId ? Number(body.dependencyId) : undefined, body.allowsBulkRequests)
   }
 
   return await dependencyRepo.updateDependency(id, body.name)

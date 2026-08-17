@@ -13,8 +13,9 @@ export default defineApiHandler(async (event) => {
   }
 
   // Si envían dependencyId, es una SUB-dependencia
-  if (body.dependencyId) {
-    return await dependencyRepo.createSubdependency(Number(body.dependencyId), body.name)
+  if (body.type === 'subdependency') {
+    if (!body.dependencyId) throw new ValidationError('dependencyId es obligatorio para subdependencias')
+    return await dependencyRepo.createSubdependency(Number(body.dependencyId), body.name, body.allowsBulkRequests)
   }
 
   // Si no, es una Dependencia principal

@@ -5,59 +5,57 @@ import type { MealSchedule } from '@prisma/client'
 export const useMealSchedulesStore = defineStore('mealSchedules', () => {
   const schedules = ref<MealSchedule[]>([])
   const loading = ref(false)
+  const error = ref<string | null>(null)
 
   async function fetchSchedules() {
     loading.value = true
     try {
-      const { data, error } = await useFetch<MealSchedule[]>('/api/meal-schedules')
-      if (error.value) throw error.value
-      if (data.value) schedules.value = data.value
+      const data = await $fetch<MealSchedule[]>('/api/meal-schedules')
+      schedules.value = data
+      error.value = null
     } catch (e: any) {
-      console.error('Error fetching schedules:', e)
-      throw e
+      error.value = e.message || 'Error fetching schedules'
+      console.error(e)
     } finally {
       loading.value = false
     }
   }
 
   async function addSchedule(payload: any) {
-    const { data, error } = await useFetch<MealSchedule>('/api/meal-schedules', {
-      method: 'POST',
-      body: payload
-    })
-    
-    if (error.value) {
-      throw error.value
+    try {
+      const data = await $fetch<MealSchedule>('/api/meal-schedules', {
+        method: 'POST',
+        body: payload
+      })
+      schedules.value.push(data)
+      return data
+    } catch (e: any) {
+      console.error(e)
+      throw e
     }
-    
-    if (data.value) {
-      schedules.value.push(data.value)
-    }
-    return data.value
   }
 
   async function updateSchedule(id: number, payload: any) {
-    const { data, error } = await useFetch<MealSchedule>(`/api/meal-schedules/${id}`, {
-      method: 'PUT',
-      body: payload
-    })
-    
-    if (error.value) {
-      throw error.value
-    }
-
-    if (data.value) {
+    try {
+      const data = await $fetch<MealSchedule>(`/api/meal-schedules/${id}`, {
+        method: 'PUT',
+        body: payload
+      })
       const index = schedules.value.findIndex(s => s.id === id)
       if (index !== -1) {
-        schedules.value[index] = data.value
+        schedules.value[index] = data
       }
+      return data
+    } catch (e: any) {
+      console.error(e)
+      throw e
     }
-    return data.value
   }
 
   return {
     schedules,
     loading,
+    error,
     fetchSchedules,
     addSchedule,
     updateSchedule

@@ -12,6 +12,7 @@ export interface SubdependencyNode {
   name: string
   dependencyId: number
   active?: boolean
+  allowsBulkRequests?: boolean
 }
 
 export const useDependenciesStore = defineStore('dependencies', {
@@ -56,18 +57,18 @@ export const useDependenciesStore = defineStore('dependencies', {
       await this.fetchAll()
     },
 
-    async createSubdependency(dependencyId: number, name: string) {
+    async createSubdependency(dependencyId: number, name: string, allowsBulkRequests?: boolean) {
       await $fetch('/api/dependencies', {
         method: 'POST',
-        body: { dependencyId, name }
+        body: { type: 'subdependency', dependencyId, name, allowsBulkRequests }
       })
       await this.fetchAll()
     },
 
-    async updateSubdependency(id: number, dependencyId: number, name: string) {
+    async updateSubdependency(id: number, dependencyId: number, name: string, allowsBulkRequests?: boolean) {
       await $fetch(`/api/dependencies/${id}`, {
         method: 'PUT',
-        body: { type: 'subdependency', dependencyId, name }
+        body: { type: 'subdependency', dependencyId, name, allowsBulkRequests }
       })
       await this.fetchAll()
     },

@@ -16,7 +16,7 @@ export function defineApiHandler(handler: EventHandler): EventHandler {
 
     try {
       const response = await handler(event)
-      
+
       // Loguear petición exitosa
       const ms = Date.now() - start
       logger.http(`HTTP ${method} ${url}`, {
@@ -26,11 +26,11 @@ export function defineApiHandler(handler: EventHandler): EventHandler {
         responseTimeMs: ms,
         ip
       })
-      
+
       return response
     } catch (error: any) {
       const ms = Date.now() - start
-      
+
       // Si el error viene de nuestras reglas de negocio (ej. NotFoundError)
       if (error instanceof DomainError) {
         logger.warn(`Domain Error: ${error.message}`, {
@@ -38,17 +38,18 @@ export function defineApiHandler(handler: EventHandler): EventHandler {
         })
         throw createError({
           statusCode: error.statusCode,
+          statusMessage: error.message, // Agregado para que el Frontend reciba el texto
           message: error.message,
           data: { code: error.code },
         })
       }
-      
+
       // Si es un error inesperado (BD caída, sintaxis, etc)
       logger.error(`Unhandled Error: ${error.message || 'Unknown'}`, {
         method, url, responseTimeMs: ms, ip,
         stack: error.stack
       })
-      
+
       throw error
     }
   })

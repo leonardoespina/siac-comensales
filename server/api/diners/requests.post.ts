@@ -18,15 +18,10 @@ export default defineApiHandler(async (event) => {
     throw new ForbiddenError('Tu usuario no está asignado a ninguna subdependencia. No puedes solicitar comida.')
   }
 
-  const isExtraordinary = Boolean(body.isExtraordinary)
-
   // 3. LA BARRERA DE TIEMPO (RELOJ VENEZUELA)
-  if (!isExtraordinary) {
-    // Si NO es extraordinaria (nómina regular), aplicamos la regla de las 24 horas.
-    const { isDateBeforeVenezuelaToday } = await import('../../utils/timezone')
-    if (isDateBeforeVenezuelaToday(body.targetDate)) {
-      throw new ValidationError('Error: La solicitud regular debe hacerse con al menos 1 día de anticipación. No puedes pedir para fechas actuales o pasadas.')
-    }
+  const { isDateBeforeVenezuelaToday } = await import('../../utils/timezone')
+  if (isDateBeforeVenezuelaToday(body.targetDate)) {
+    throw new ValidationError('Error: La solicitud regular debe hacerse con al menos 1 día de anticipación. No puedes pedir para fechas actuales o pasadas.')
   }
 
   // 3. Delegar al Servicio (Orquestador)
@@ -34,7 +29,6 @@ export default defineApiHandler(async (event) => {
     new Date(body.targetDate),
     body.shiftType,
     userContext.id,
-    body.dinersList,
-    isExtraordinary
+    body.dinersList
   )
 })

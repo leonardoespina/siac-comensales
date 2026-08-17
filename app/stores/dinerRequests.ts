@@ -8,12 +8,11 @@ export const useDinerRequestsStore = defineStore('dinerRequests', () => {
   async function fetchRequests(startDate: string, endDate: string) {
     loading.value = true
     try {
-      const { data, error } = await useFetch<any[]>('/api/diner-requests', {
+      const data = await $fetch<any[]>('/api/diner-requests', {
         query: { startDate, endDate }
       })
-      if (error.value) throw error.value
-      if (data.value) requests.value = data.value
-    } catch (e) {
+      requests.value = data
+    } catch (e: any) {
       console.error(e)
       throw e
     } finally {
@@ -22,21 +21,55 @@ export const useDinerRequestsStore = defineStore('dinerRequests', () => {
   }
 
   async function createRequests(payload: any) {
-    const { data, error } = await useFetch('/api/diner-requests', {
-      method: 'POST',
-      body: payload
-    })
-    if (error.value) throw error.value
-    return data.value
+    try {
+      const data = await $fetch('/api/diner-requests', {
+        method: 'POST',
+        body: payload
+      })
+      return data
+    } catch (e: any) {
+      console.error(e)
+      throw e
+    }
   }
 
   async function deleteRequest(id: number) {
-    const { error } = await useFetch(`/api/diner-requests/${id}`, {
-      method: 'DELETE'
-    })
-    if (error.value) throw error.value
-    // Remover localmente para no tener que recargar todo
-    requests.value = requests.value.filter(r => r.id !== id)
+    try {
+      await $fetch(`/api/diner-requests/${id}`, {
+        method: 'DELETE'
+      })
+      // Remover localmente para no tener que recargar todo
+      requests.value = requests.value.filter(r => r.id !== id)
+    } catch (e: any) {
+      console.error(e)
+      throw e
+    }
+  }
+
+  async function deleteRequestsBulk(ids: number[]) {
+    try {
+      await $fetch('/api/diner-requests/bulk', {
+        method: 'DELETE',
+        body: { ids }
+      })
+      requests.value = requests.value.filter(r => !ids.includes(r.id))
+    } catch (e: any) {
+      console.error(e)
+      throw e
+    }
+  }
+
+  async function updateRequestBatch(batchOrId: string, payload: any) {
+    try {
+      const data = await $fetch(`/api/diner-requests/${batchOrId}`, {
+        method: 'PUT',
+        body: payload
+      })
+      return data
+    } catch (e: any) {
+      console.error(e)
+      throw e
+    }
   }
 
   return {
@@ -44,6 +77,8 @@ export const useDinerRequestsStore = defineStore('dinerRequests', () => {
     loading,
     fetchRequests,
     createRequests,
-    deleteRequest
+    deleteRequest,
+    deleteRequestsBulk,
+    updateRequestBatch
   }
 })

@@ -216,9 +216,10 @@ model Dependency {
 model Subdependency {
   id           Int        @id @default(autoincrement())
   name         String
-  active       Boolean    @default(true)
-  dependencyId Int        @map("dependency_id")
-  dependency   Dependency @relation(fields: [dependencyId], references: [id], onDelete: Restrict)
+  active             Boolean    @default(true)
+  allowsBulkRequests Boolean    @default(false) @map("allows_bulk_requests")
+  dependencyId       Int        @map("dependency_id")
+  dependency         Dependency @relation(fields: [dependencyId], references: [id], onDelete: Restrict)
 
   users  User[]
   diners Diner[]
@@ -305,9 +306,6 @@ model DinerRequest {
   // Código único para identificar un bloque de solicitudes enviadas simultáneamente
   batchCode String?  @map("batch_code")
 
-  // AQUÍ VA LA LÍNEA NUEVA PARA LAS VISITAS EXTRAORDINARIAS:
-  isExtraordinary Boolean @default(false) @map("is_extraordinary")
-
   createdById Int  @map("created_by_id")
   createdBy   User @relation(name: "DinerRequestsCreated", fields: [createdById], references: [id], onDelete: Restrict)
 
@@ -321,6 +319,7 @@ model DinerRequest {
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   @@index([createdById])
   @@index([approvedById])
@@ -340,6 +339,9 @@ model DinerRequestDetail {
   diner   Diner @relation(fields: [dinerId], references: [id])
 
   rationType String @default("NORMAL") @map("ration_type")
+  quantity   Int    @default(1)
+
+  dispatchedAt DateTime? @map("dispatched_at")
 
   @@unique([requestId, dinerId])
   @@index([requestId])

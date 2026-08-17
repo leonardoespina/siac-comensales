@@ -1,48 +1,223 @@
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useDinerRequestsStore } from '~/stores/dinerRequests'
 import { useAuthStore } from '~/stores/auth'
+import { useDinersStore } from '~/stores/diners'
+import { useDependenciesStore } from '~/stores/dependencies'
+import { useSquadsStore } from '~/stores/squads'
+import { useMealSchedulesStore } from '~/stores/mealSchedules'
+import { useDiningRoomsStore } from '~/stores/diningRooms'
+import { useSettingsStore } from '~/stores/settings'
 import { useNotifications } from '~/composables/core/useNotifications'
 import dayjs from 'dayjs'
 
 export function useDinerRequestForm() {
   const store = useDinerRequestsStore()
   const authStore = useAuthStore()
+  const dinersStore = useDinersStore()
+  const dependenciesStore = useDependenciesStore()
+  const squadsStore = useSquadsStore()
+  const schedulesStore = useMealSchedulesStore()
+  const diningRoomsStore = useDiningRoomsStore()
+  const settingsStore = useSettingsStore()
   const { notify } = useNotifications()
 
   const loading = ref(false)
   const isOpen = ref(false)
+  const isConfirmOpen = ref(false)
+  const isViewMode = ref(false)
+  const isEditMode = ref(false)
+  const currentBatchCode = ref<string | null>(null)
+  const tableFilter = ref('')
+  const masterChecks = ref<Record<string, boolean>>({})
+  const dinerDiningRooms = ref<Record<string, number | null>>({})
 
-  // Filtros del panel izquierdo
   const filters = ref({
     dependencyId: authStore.user?.dependencyId || null as number | null,
     subdependencyId: authStore.user?.subdependencyId || null as number | null,
     squadId: null as number | null,
-    dateFrom: dayjs().format('YYYY-MM-DD'),
-    dateTo: dayjs().format('YYYY-MM-DD'),
+    date: dayjs().format('YYYY-MM-DD'),
     diningRoomId: null as number | null,
-    observations: '',
-    isExtraordinary: false // Mapeado de "Retiro Mara" o "Tipo Lunch" por ahora
+    observations: ''
+  })
+  
+  const formDateText = ref('')
+
+  const requestSummary = ref({
+    date: '',
+    shifts: {} as Record<string, number>,
+    total: 0
+  })
+  
+  const formatToDDMMYYYY = (dateStr: string) => {
+    if (!dateStr) return ''
+    const parts = dateStr.split('-')
+    if (parts.length !== 3) return dateStr
+    return `${parts[2]}/${parts[1]}/${parts[0]}`
+  }
+
+  const updateDateText = () => {
+    formDateText.value = formatToDDMMYYYY(filters.value.date)
+  }
+  updateDateText()
+
+  watch(() => filters.value.date, () => {
+    updateDateText()
   })
 
-  // Lista de comensales en la grilla
-  const loadedDiners = ref<any[]>([])
+  const allowedDates = (dateStr: string) => {
+    const isBypass = authStore.user?.role?.permissions?.some(p => 
+      (p.module.code === 'DINING_ROOMS' && p.canUpdate) || 
+      (p.module.code === 'GLOBAL_ACCESS' && p.canUpdate)
+    )
 
-  // Estado de los checkboxes por cada comensal: { [dinerId]: { [shiftType]: boolean } }
+    // Si el usuario tiene permisos de bypass, permitimos cualquier fecha (true)
+    if (isBypass) return true
+    
+    // Por petición explícita, SOLO se permite seleccionar EXACTAMENTE el día de mañana (1 día de anticipación)
+    const targetDate = dayjs(dateStr, 'YYYY/MM/DD').startOf('day')
+    const tomorrow = dayjs().add(1, 'day').startOf('day')
+    return targetDate.isSame(tomorrow, 'day')
+  }
+
+  // Si cambia el comedor global, asignarlo a todos los comensales actuales como atajo
+  watch(() => filters.value.diningRoomId, (newId) => {
+    if (isViewMode.value) return
+    loadedDiners.value.forEach(d => {
+      dinerDiningRooms.value[d.id] = newId
+    })
+  })
+
+  const activeShifts = computed(() => {
+    // Cutoff Engine Logic
+    let isBypass = false
+
+    if (!isBypass && authStore.user?.role?.permissions) {
+      isBypass = authStore.user.role.permissions.some(p => 
+        (p.module.code === 'DINING_ROOMS' && p.canUpdate) || 
+        (p.module.code === 'GLOBAL_ACCESS')
+      )
+    }
+
+    if (isBypass) {
+      return schedulesStore.schedules.filter(s => s.active).map(s => s.shiftType)
+    }
+
+    // Normal Cutoff Check
+    const start = dayjs(filters.value.date).startOf('day')
+    const now = dayjs()
+    const diffDays = start.diff(now.startOf('day'), 'day')
+    const minDays = settingsStore.minDaysAhead
+    const cutoff = settingsStore.cutoffTime
+
+    if (diffDays < minDays) return [] // Completely blocked
+    if (diffDays === minDays) {
+      const isPastCutoff = (now.hour() > cutoff.hours) || 
+                           (now.hour() === cutoff.hours && now.minute() >= cutoff.minutes)
+      if (isPastCutoff) return []
+    }
+
+    return schedulesStore.schedules.filter(s => s.active).map(s => s.shiftType)
+  })
+
+  const selectedSubdep = computed(() => {
+    return filteredSubdependencies.value.find(s => s.id === filters.value.subdependencyId)
+  })
+
+  const allowsBulkRequests = computed(() => selectedSubdep.value?.allowsBulkRequests === true)
+
+  const gridColumns = computed(() => {
+    const baseCols = [
+      { name: 'nro', label: 'No.', align: 'left', field: 'id', style: 'width: 50px' },
+      { name: 'cedula', label: 'Cédula', align: 'left', field: 'cedula' },
+      { name: 'nombre', label: 'Nombre', align: 'left', field: 'name' },
+      { name: 'rationType', label: 'Dieta', align: 'left', field: 'rationType' }
+    ]
+    
+    const hasBulkInViewMode = isViewMode.value && loadedDiners.value.some(d => quantities.value[d.id] > 1 || gridState.value[d.id]?.['MASIVO'] === true)
+
+    if (allowsBulkRequests.value || hasBulkInViewMode) {
+      baseCols.push({ name: 'quantity', label: 'Cant.', align: 'center', field: 'quantity', style: 'width: 80px' })
+    }
+    
+    baseCols.push({ name: 'comedor', label: 'Comedor', align: 'left', field: () => filters.value.diningRoomId ? diningRoomsStore.diningRooms.find(d => d.id === filters.value.diningRoomId)?.name : 'N/A' })
+    const shiftCols = activeShifts.value.map(shift => ({
+      name: shift,
+      label: shift.charAt(0) + shift.slice(1).toLowerCase(),
+      align: 'center',
+      field: shift
+    }))
+    return [...baseCols, ...shiftCols, { name: 'MASIVO', label: 'Masivo', align: 'center', field: 'MASIVO' }] as any[]
+  })
+
+  const filteredSquads = computed(() => {
+    let availableDiners = dinersStore.diners
+    if (filters.value.subdependencyId) {
+      availableDiners = availableDiners.filter(d => d.subdependencyId === filters.value.subdependencyId)
+    } else if (filters.value.dependencyId) {
+      availableDiners = availableDiners.filter(d => d.dependencyId === filters.value.dependencyId)
+    }
+    const activeSquadIds = new Set(availableDiners.map(d => d.squadId).filter(id => id != null))
+    return squadsStore.squads.filter(squad => activeSquadIds.has(squad.id))
+  })
+
+  // Computado de subdependencias basado en la dependencia seleccionada (o la del usuario)
+  const filteredSubdependencies = computed(() => {
+    const targetDepId = filters.value.dependencyId || authStore.user?.dependencyId
+    if (!targetDepId) return []
+    const dep = dependenciesStore.dependencies.find(d => d.id === targetDepId)
+    return dep?.subdependencies || []
+  })
+
+  watch(() => filters.value.dependencyId, () => {
+    filters.value.subdependencyId = null
+  })
+
+  const loadedDiners = ref<any[]>([])
   const gridState = ref<Record<number, Record<string, boolean>>>({})
+  const quantities = ref<Record<number, number>>({})
+
+  const availableProxyDiners = computed(() => {
+    if (!filters.value.dependencyId) return []
+    // Retorna los comensales de la gerencia que tengan huella (legacy) o registro biométrico
+    return dinersStore.diners.filter(d => 
+      (d.fingerprint || d.biometricRecord) && 
+      (filters.value.subdependencyId ? true : true) // Pertenecen a la dependencia ya por filtrado global del store
+    )
+  })
+
+  function swapDiner(oldDinerId: number, newDiner: any) {
+    const idx = loadedDiners.value.findIndex(d => d.id === oldDinerId)
+    if (idx !== -1) {
+      // Transfer states
+      gridState.value[newDiner.id] = gridState.value[oldDinerId] || {}
+      quantities.value[newDiner.id] = quantities.value[oldDinerId] || 1
+      dinerDiningRooms.value[newDiner.id] = dinerDiningRooms.value[oldDinerId]
+      
+      delete gridState.value[oldDinerId]
+      delete quantities.value[oldDinerId]
+      delete dinerDiningRooms.value[oldDinerId]
+
+      loadedDiners.value[idx] = { ...newDiner }
+    }
+  }
 
   function initGridStateForDiners(diners: any[], shiftTypes: string[]) {
-    // Preservar el estado anterior si el comensal ya estaba en la grilla
     const newState: Record<number, Record<string, boolean>> = {}
-    
+    const newQuants: Record<number, number> = {}
     for (const diner of diners) {
       newState[diner.id] = gridState.value[diner.id] || {}
+      newQuants[diner.id] = quantities.value[diner.id] || 1
       for (const shift of shiftTypes) {
         if (newState[diner.id][shift] === undefined) {
           newState[diner.id][shift] = false
         }
       }
+      if (newState[diner.id]['MASIVO'] === undefined) {
+        newState[diner.id]['MASIVO'] = false
+      }
     }
     gridState.value = newState
+    quantities.value = newQuants
   }
 
   function toggleAll(shiftType: string, checked: boolean) {
@@ -52,70 +227,243 @@ export function useDinerRequestForm() {
     }
   }
 
-  function addManualDiner(diner: any, shiftTypes: string[]) {
-    if (!loadedDiners.value.find(d => d.id === diner.id)) {
-      loadedDiners.value.push(diner)
-      initGridStateForDiners(loadedDiners.value, shiftTypes)
+  function resetMasterChecks() {
+    for (const shift of activeShifts.value) {
+      masterChecks.value[shift] = false
     }
+    masterChecks.value['MASIVO'] = false
   }
+
+  function refreshGrid() {
+    const newSubd = filters.value.subdependencyId
+    const newSquad = filters.value.squadId
+  
+    if (!newSubd && !newSquad) {
+      loadedDiners.value = []
+      return
+    }
+  
+    let filtered = dinersStore.diners
+    if (newSubd) {
+      filtered = filtered.filter(d => d.subdependencyId === newSubd)
+    }
+    if (newSquad) {
+      filtered = filtered.filter(d => d.squadId === newSquad)
+    }
+  
+    loadedDiners.value = [...filtered]
+    initGridStateForDiners(loadedDiners.value, activeShifts.value)
+    resetMasterChecks()
+  }
+
+  watch([() => filters.value.subdependencyId, () => filters.value.squadId, () => filters.value.dependencyId], async () => {
+    if (isViewMode.value) return
+
+    // Para evitar cargar todos los comensales de la empresa de golpe (lo cual crashearía si hay miles),
+    // vamos a buscar al backend específicamente los de la dependencia/subdependencia seleccionada.
+    if (filters.value.subdependencyId) {
+      await dinersStore.fetchAll({ subdependencyId: filters.value.subdependencyId })
+    } else if (filters.value.dependencyId) {
+      await dinersStore.fetchAll({ dependencyId: filters.value.dependencyId })
+    } else {
+      dinersStore.diners = []
+    }
+
+    refreshGrid()
+  })
 
   function clearForm() {
     filters.value.dependencyId = authStore.user?.dependencyId || null
     filters.value.subdependencyId = authStore.user?.subdependencyId || null
     filters.value.squadId = null
     filters.value.diningRoomId = null
+    
+    // Por regla de negocio, siempre inicializamos en MAÑANA
+    filters.value.date = dayjs().add(1, 'day').format('YYYY-MM-DD')
+    
     filters.value.observations = ''
-    filters.value.isExtraordinary = false
+    tableFilter.value = ''
     loadedDiners.value = []
     gridState.value = {}
+    quantities.value = {}
+    dinerDiningRooms.value = {}
   }
 
   function openCreate() {
     clearForm()
+    isViewMode.value = false
+    isEditMode.value = false
+    currentBatchCode.value = null
+    isOpen.value = true
+    refreshGrid() // Petición previa del usuario
+  }
+
+  function loadExistingData(dateGroup: any, editMode: boolean = false) {
+    clearForm()
+    isViewMode.value = !editMode
+    isEditMode.value = editMode
+    currentBatchCode.value = dateGroup.id || null
+    isOpen.value = true
+
+    const safeDate = typeof dateGroup.date === 'string' && dateGroup.date.includes('T') ? dateGroup.date.split('T')[0] : dateGroup.date
+    filters.value.date = safeDate
+
+    const firstReq = dateGroup.originalRequests[0]
+    
+    // Si queremos sacar la fecha desde firstReq por seguridad:
+    const reqDate = typeof firstReq.date === 'string' && firstReq.date.includes('T') ? firstReq.date.split('T')[0] : firstReq.date
+    filters.value.date = reqDate ? reqDate : dayjs().format('YYYY-MM-DD')
+    
+    filters.value.diningRoomId = firstReq.diningRoomId
+    
+    // Si queremos que los dropdowns superiores (Dependencia/Cuadrilla) tengan sentido,
+    // podríamos buscar el diner y usar su dependencia. Pero en modo vista global,
+    // es mejor dejar esos filtros vacíos o poner los del usuario creador.
+    
+    const dinersMap = new Map()
+    
+    // IMPORTANTE: Filtrar y cargar solo las solicitudes que NO están eliminadas,
+    // EXCEPTO si el lote entero está eliminado (modo auditoría para admins).
+    const activeRequests = dateGroup.originalRequests.filter((req: any) => req.deletedAt === null)
+    const sourceRequests = activeRequests.length > 0 ? activeRequests : dateGroup.originalRequests
+    
+    sourceRequests.forEach((req: any) => {
+      const shift = req.shiftType
+      const reqDiningRoomId = req.diningRoomId
+      
+      req.details?.forEach((d: any) => {
+        // Usa el ID del comensal. Si es visitante (sin ID), generamos uno virtual para la fila
+        const dinerId = d.dinerId || `EXTRA-${Math.random().toString(36).substr(2, 9)}`
+        
+        if (!dinersMap.has(dinerId)) {
+          dinersMap.set(dinerId, {
+            id: dinerId,
+            cedula: d.diner?.cedula || 'N/A',
+            name: d.diner?.name || 'Visitantes Extraordinarios',
+            rationType: d.diner?.rationType || 'Normal',
+            // Estos campos podrían no estar si es visitante, pero el grid los lee:
+            dependencyId: d.diner?.subdependency?.dependencyId,
+            subdependencyId: d.diner?.subdependencyId,
+            squadId: d.diner?.squadId
+          })
+        }
+        
+        if (!gridState.value[dinerId]) {
+          gridState.value[dinerId] = {}
+        }
+        gridState.value[dinerId][shift] = true
+        
+        // Cargar el flag de Masivo
+        if (d.modality === 'TAKE_AWAY') {
+          gridState.value[dinerId]['MASIVO'] = true
+        } else if (gridState.value[dinerId]['MASIVO'] === undefined) {
+          gridState.value[dinerId]['MASIVO'] = false
+        }
+
+        quantities.value[dinerId] = d.quantity || 1
+        dinerDiningRooms.value[dinerId] = reqDiningRoomId
+      })
+    })
+    
+    loadedDiners.value = Array.from(dinersMap.values())
+    
+    // Auto-completar los selectores de Dependencia y Subdependencia con el primer comensal real encontrado
+    if (loadedDiners.value.length > 0) {
+      const firstDiner = loadedDiners.value.find(d => d.dependencyId)
+      if (firstDiner) {
+        filters.value.dependencyId = firstDiner.dependencyId || null
+        filters.value.subdependencyId = firstDiner.subdependencyId || null
+      }
+    }
+    
+    gridState.value = { ...gridState.value } // Forzar actualización reactiva profunda en Vue 3
     isOpen.value = true
   }
 
-  async function submit(shiftTypes: string[]) {
-    if (!filters.value.dateFrom || !filters.value.dateTo) {
-      notify.warning('Debe seleccionar el rango de fechas (Desde - Hasta)')
-      return
+  function prepareSubmit() {
+    if (!filters.value.date) {
+      notify.warning('Debe seleccionar la fecha de solicitud')
+      return false
     }
 
-    // Generar array de fechas en el rango
-    let datesArray: string[] = []
-    const start = dayjs(filters.value.dateFrom)
-    const end = dayjs(filters.value.dateTo)
-    
-    if (start.isAfter(end)) {
-      notify.warning('La fecha Desde no puede ser mayor a la fecha Hasta')
-      return
+    // Reset summary
+    requestSummary.value = {
+      date: filters.value.date,
+      shifts: {},
+      total: 0
     }
 
-    let current = start
-    while (current.isBefore(end) || current.isSame(end, 'day')) {
-      datesArray.push(current.format('YYYY-MM-DD'))
-      current = current.add(1, 'day')
+    for (const shift of activeShifts.value) {
+      const dinersForShift = loadedDiners.value.filter(d => gridState.value[d.id]?.[shift])
+      if (dinersForShift.length === 0) continue
+
+      let portions = 0
+      for (const d of dinersForShift) {
+        portions += (quantities.value[d.id] || 1)
+      }
+      requestSummary.value.shifts[shift] = portions
+      requestSummary.value.total += portions
     }
+
+    if (requestSummary.value.total === 0) {
+      notify.warning('Debe seleccionar al menos un plato para realizar la solicitud')
+      return false
+    }
+
+    isConfirmOpen.value = true
+  }
+
+  async function executeSubmit() {
+
+    let datesArray: string[] = [dayjs(filters.value.date).format('YYYY-MM-DD')]
 
     loading.value = true
     let successCount = 0
     let errorCount = 0
 
     try {
-      // Agrupar peticiones por Turno
-      for (const shift of shiftTypes) {
-        const dinerIdsForShift = loadedDiners.value
-          .filter(d => gridState.value[d.id]?.[shift])
-          .map(d => d.id)
+      const batchCode = `REQ-${dayjs().format('YYMMDD')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`
 
-        if (dinerIdsForShift.length > 0) {
+      for (const shift of activeShifts.value) {
+        const dinersForShift = loadedDiners.value.filter(d => gridState.value[d.id]?.[shift])
+          
+        if (dinersForShift.length === 0) continue
+
+        // Agrupar por comedor
+        const groupsByDiningRoom: Record<string, any[]> = {}
+        let missingDiningRoom = false
+
+        for (const d of dinersForShift) {
+          const dRoomId = dinerDiningRooms.value[d.id] || filters.value.diningRoomId
+          if (!dRoomId) {
+            missingDiningRoom = true
+            break
+          }
+          const key = String(dRoomId)
+          if (!groupsByDiningRoom[key]) groupsByDiningRoom[key] = []
+          groupsByDiningRoom[key].push({
+            id: d.id,
+            quantity: quantities.value[d.id] || 1,
+            modality: gridState.value[d.id]?.['MASIVO'] ? 'TAKE_AWAY' : 'DINE_IN'
+          })
+        }
+
+        if (missingDiningRoom) {
+          notify.warning('Hay comensales sin comedor asignado para el turno de ' + shift)
+          return false
+        }
+
+        for (const dRoomIdStr of Object.keys(groupsByDiningRoom)) {
+          const diners = groupsByDiningRoom[dRoomIdStr]
           try {
             await store.createRequests({
               dates: datesArray,
               shiftType: shift,
-              isExtraordinary: filters.value.isExtraordinary,
-              diningRoomId: filters.value.diningRoomId,
-              dinerIds: dinerIdsForShift
+              targetSubdependencyId: filters.value.subdependencyId,
+              observations: filters.value.observations || '',
+              diningRoomId: parseInt(dRoomIdStr),
+              diners: diners,
+              batchCode: batchCode
             })
             successCount++
           } catch (e: any) {
@@ -129,10 +477,83 @@ export function useDinerRequestForm() {
       if (successCount > 0) {
         notify.success('Solicitudes enviadas exitosamente bajo un código de lote.')
         clearForm()
+        isOpen.value = false
+        return true
       } else if (errorCount === 0) {
         notify.warning('No seleccionó ningún comensal para ningún turno')
+        return false
       }
 
+    } finally {
+      loading.value = false
+      isConfirmOpen.value = false
+    }
+    return false
+  }
+
+  async function submitUpdate() {
+    if (!currentBatchCode.value) return
+
+    const selectedDiners = []
+    
+    // Recopilar comensales seleccionados independientemente del turno para validación inicial
+    for (const diner of loadedDiners.value) {
+      if (gridState.value[diner.id]) {
+        let hasAnyShift = false
+        for (const shift of activeShifts.value) {
+          if (gridState.value[diner.id][shift]) {
+            hasAnyShift = true
+          }
+        }
+        if (hasAnyShift) {
+          selectedDiners.push({
+            id: diner.id,
+            quantity: quantities.value[diner.id] || 1
+          })
+        }
+      }
+    }
+
+    if (selectedDiners.length === 0) {
+      notify.warning('Debe seleccionar al menos un comensal')
+      return
+    }
+
+    try {
+      loading.value = true
+      
+      const shiftsPayload = []
+      for (const shift of activeShifts.value) {
+        const dinersForShift = selectedDiners.filter(d => gridState.value[d.id][shift])
+        if (dinersForShift.length > 0) {
+          shiftsPayload.push({
+            shiftType: shift,
+            diners: dinersForShift.map(d => ({
+              id: d.id,
+              quantity: d.quantity || 1,
+              modality: gridState.value[d.id]['MASIVO'] ? 'TAKEOUT' : 'DINE_IN',
+              diningRoomId: dinerDiningRooms.value[d.id] || filters.value.diningRoomId
+            }))
+          })
+        }
+      }
+
+      const formattedDate = dayjs(filters.value.date).format('YYYY-MM-DD')
+      
+      const payload = {
+        dates: [formattedDate],
+        targetSubdependencyId: filters.value.subdependencyId,
+        diningRoomId: filters.value.diningRoomId,
+        shifts: shiftsPayload
+      }
+      
+      await store.updateRequestBatch(currentBatchCode.value, payload)
+
+      notify.success('Solicitud actualizada con éxito')
+      isOpen.value = false
+      
+    } catch (e: any) {
+      notify.error(e.data?.message || e.message || 'Error al actualizar')
     } finally {
       loading.value = false
     }
@@ -143,11 +564,30 @@ export function useDinerRequestForm() {
     filters,
     loadedDiners,
     gridState,
-    initGridStateForDiners,
+    quantities,
+    dinerDiningRooms,
+    tableFilter,
+    masterChecks,
+    formDateText,
+    allowedDates,
+    activeShifts,
+    gridColumns,
+    filteredSquads,
+    filteredSubdependencies,
+    selectedSubdep,
+    allowsBulkRequests,
+    availableProxyDiners,
+    swapDiner,
     toggleAll,
-    addManualDiner,
-    submit,
     isOpen,
-    openCreate
+    isConfirmOpen,
+    requestSummary,
+    isViewMode,
+    isEditMode,
+    openCreate,
+    loadExistingData,
+    prepareSubmit,
+    executeSubmit,
+    submitUpdate
   }
 }

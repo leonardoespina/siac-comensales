@@ -18,7 +18,8 @@ export function useDependenciesForm() {
   const formDataSub = ref({
     id: null as number | null,
     name: '',
-    dependencyId: null as number | null
+    dependencyId: null as number | null,
+    allowsBulkRequests: false
   })
 
   // Búsqueda
@@ -40,13 +41,18 @@ export function useDependenciesForm() {
 
   const openCreateSub = () => {
     isEditingSub.value = false
-    formDataSub.value = { id: null, name: '', dependencyId: null }
+    formDataSub.value = { id: null, name: '', dependencyId: null, allowsBulkRequests: false }
     showSubDialog.value = true
   }
 
   const openEditSub = (sub: any) => {
     isEditingSub.value = true
-    formDataSub.value = { id: sub.id, name: sub.name, dependencyId: sub.dependencyId }
+    formDataSub.value = { 
+      id: sub.id, 
+      name: sub.name, 
+      dependencyId: sub.dependencyId,
+      allowsBulkRequests: sub.allowsBulkRequests || false
+    }
     showSubDialog.value = true
   }
 
@@ -70,10 +76,14 @@ export function useDependenciesForm() {
     if (!formDataSub.value.name || !formDataSub.value.dependencyId) return
     try {
       if (isEditingSub.value && formDataSub.value.id) {
-        await store.updateSubdependency(formDataSub.value.id, formDataSub.value.dependencyId, formDataSub.value.name)
+        await store.updateSubdependency(formDataSub.value.id, formDataSub.value.dependencyId, formDataSub.value.name, formDataSub.value.allowsBulkRequests)
         $q.notify({ type: 'positive', message: 'Subdependencia actualizada' })
       } else {
-        await store.createSubdependency(formDataSub.value.dependencyId, formDataSub.value.name)
+        if (!formDataSub.value.dependencyId) {
+          $q.notify({ type: 'warning', message: 'Debe seleccionar una dependencia principal' })
+          return
+        }
+        await store.createSubdependency(formDataSub.value.dependencyId, formDataSub.value.name, formDataSub.value.allowsBulkRequests)
         $q.notify({ type: 'positive', message: 'Subdependencia creada' })
       }
       showSubDialog.value = false

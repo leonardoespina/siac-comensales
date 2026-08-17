@@ -12,9 +12,9 @@ export default defineApiHandler(async (event) => {
     where: { id: userId },
     include: { role: { include: { permissions: { include: { module: true } } } } }
   })
-  const hasManagerBypass = user?.role?.permissions?.some(p => 
-    (p.module.code === 'DINING_ROOMS' && p.canUpdate) || 
-    (p.module.code === 'GLOBAL_ACCESS')
+  const hasGlobalBypass = user.role?.permissions.some(p => 
+    (p.module.code === 'DINING_ROOMS' && p.can_update) || 
+    (p.module.code === 'GLOBAL_ACCESS' && p.can_update)
   ) || false
 
   const body = await readBody(event)
@@ -22,8 +22,9 @@ export default defineApiHandler(async (event) => {
   return dinerRequestService.createRequests({
     dates: body.dates, // Array de fechas 'YYYY-MM-DD'
     shiftType: body.shiftType,
-    isExtraordinary: body.isExtraordinary || false,
-    diningRoomId: body.diningRoomId,
-    dinerIds: body.dinerIds
-  }, userId, hasManagerBypass)
+    targetSubdependencyId: body.targetSubdependencyId,
+    diningRoomId: body.diningRoomId || null,
+    diners: body.diners,
+    batchCode: body.batchCode
+  }, userId, hasGlobalBypass)
 })

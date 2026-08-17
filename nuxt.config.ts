@@ -100,6 +100,7 @@ export default defineNuxtConfig({
     databaseUrl: process.env.DATABASE_URL,
     public: {
       appName: 'SIAC',
+      testBypassTimeRules: process.env.TEST_BYPASS_TIME_RULES === 'true',
     },
   },
 

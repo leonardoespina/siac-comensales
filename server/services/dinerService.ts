@@ -23,13 +23,12 @@ export async function submitDinerRequest(
   targetDate: Date, 
   shiftType: string, 
   supervisorId: number, 
-  dinersList: Array<{ dinerId: number, rationType: string }>,
-  isExtraordinary: boolean = false
+  dinersList: Array<{ dinerId: number, rationType: string }>
 ) {
   const requestDate = new Date()
 
   // 1. Validaciones Puras de Dominio
-  if (!isExtraordinary && !isLeadTimeValid(requestDate, targetDate)) {
+  if (!isLeadTimeValid(requestDate, targetDate)) {
     throw new Error('ValidationError: Debe solicitar la comida con al menos 24 horas de anticipación.')
   }
 
@@ -38,12 +37,14 @@ export async function submitDinerRequest(
   }
 
   // 2. Transacción de Base de Datos a través del Repositorio
+  // Como no existirá flujo de aprobación manual, nacen APROBADAS automáticamente.
   const newRequest = await dinerRepo.createDinerRequest({
     date: targetDate,
     shiftType,
     createdById: supervisorId,
-    diners: dinersList,
-    isExtraordinary
+    approvedById: supervisorId,
+    status: 'APPROVED',
+    diners: dinersList
   })
 
   // 3. Emisión de Eventos Desacoplados

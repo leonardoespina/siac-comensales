@@ -1,15 +1,18 @@
 import { defineApiHandler } from '../../utils/handler'
 import { requirePermission } from '../../utils/auth'
 import { dinerRequestService } from '../../services/dinerRequestService'
-import { dinerRequestRepository } from '../../repository/dinerRequestRepository'
-import { createError } from 'h3'
+import { createError, readBody } from 'h3'
 import { prisma } from '../../utils/prisma'
 
 export default defineApiHandler(async (event) => {
   const userId = await requirePermission(event, 'DINERS_REQUESTS', 'delete')
-  const id = parseInt(event.context.params?.id || '0', 10)
   
-  if (!id) throw new Error('ID inválido')
+  const body = await readBody(event)
+  const ids = body.ids as number[]
+  
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    throw new Error('Debe proveer una lista de IDs para eliminar')
+  }
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -20,11 +23,5 @@ export default defineApiHandler(async (event) => {
     (p.module.code === 'GLOBAL_ACCESS' && p.can_update)
   ) || false
   
-  // Buscar la solicitud para obtener su fecha objetivo y validarla contra el Cutoff
-  const request = await dinerRequestRepository.findById(id)
-  if (!request) {
-    throw createError({ statusCode: 404, statusMessage: 'Solicitud no encontrada' })
-  }
-
-  return dinerRequestService.deleteRequest(id, request.date, hasGlobalBypass)
+  return dinerRequestService.deleteRequestsBulk(ids, hasGlobalBypass)
 })

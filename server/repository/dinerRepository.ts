@@ -187,16 +187,17 @@ export async function createDinerRequest(data: {
   date: Date,
   shiftType: string,
   createdById: number,
-  diners: Array<{ dinerId: number, rationType: string }>,
-  isExtraordinary?: boolean
+  approvedById?: number,
+  status?: string,
+  diners: Array<{ dinerId: number, rationType: string }>
 }) {
   return prisma.dinerRequest.create({
     data: {
       date: data.date,
       shiftType: data.shiftType,
       createdById: data.createdById,
-      isExtraordinary: data.isExtraordinary || false,
-      status: 'PENDING',
+      approvedById: data.approvedById || data.createdById, // Auto-Aprobado por el mismo creador
+      status: data.status || 'APPROVED', // Nacen aprobadas por defecto
       details: {
         create: data.diners.map(d => ({
           dinerId: d.dinerId,

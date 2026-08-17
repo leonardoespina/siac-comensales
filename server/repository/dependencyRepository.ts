@@ -81,21 +81,29 @@ export async function getSubdependenciesByDependency(dependencyId: number, inclu
   })
 }
 
-export async function createSubdependency(dependencyId: number, name: string) {
+export async function getSubdependencyById(id: number) {
+  return prisma.subdependency.findUnique({
+    where: { id }
+  })
+}
+
+export async function createSubdependency(dependencyId: number, name: string, allowsBulkRequests?: boolean) {
   return prisma.subdependency.create({
     data: {
       dependencyId,
-      name
+      name,
+      allowsBulkRequests: allowsBulkRequests || false
     }
   })
 }
 
-export async function updateSubdependency(id: number, name: string, dependencyId?: number) {
+export async function updateSubdependency(id: number, name: string, dependencyId?: number, allowsBulkRequests?: boolean) {
   return prisma.subdependency.update({
     where: { id },
     data: {
       name,
-      ...(dependencyId && { dependencyId })
+      ...(dependencyId && { dependencyId }),
+      ...(allowsBulkRequests !== undefined && { allowsBulkRequests })
     }
   })
 }

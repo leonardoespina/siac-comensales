@@ -3,20 +3,40 @@ import type { DinerRequest, DinerRequestDetail } from '@prisma/client'
 
 export const dinerRequestRepository = {
   
-  async findAllByDateRange(startDate: Date, endDate: Date) {
+  async findAllByDateRange(startDate: Date, endDate: Date, filterDependencyId?: number | null, filterSubdependencyId?: number | null, includeDeleted: boolean = false) {
     return prisma.dinerRequest.findMany({
       where: {
         date: {
           gte: startDate,
           lte: endDate
-        }
+        },
+        ...(includeDeleted ? {} : { deletedAt: null }),
+        ...(filterSubdependencyId ? {
+          details: {
+            some: {
+              diner: {
+                subdependencyId: filterSubdependencyId
+              }
+            }
+          }
+        } : filterDependencyId ? {
+          details: {
+            some: {
+              diner: {
+                subdependency: {
+                  dependencyId: filterDependencyId
+                }
+              }
+            }
+          }
+        } : {})
       },
       include: {
         createdBy: { select: { name: true, cedula: true } },
         diningRoom: { select: { name: true } },
         details: {
           include: {
-            diner: { select: { cedula: true, name: true, rationType: true } }
+            diner: { select: { cedula: true, name: true, rationType: true, subdependencyId: true, squadId: true, subdependency: { select: { dependencyId: true } } } }
           }
         }
       },
@@ -35,21 +55,24 @@ export const dinerRequestRepository = {
 
   async findOverlappingDiners(date: Date, shiftType: string, dinerIds: number[]) {
     // Busca detalles de peticiones existentes para los comensales dados en el día y turno específicos
+    // IGNORA las solicitudes que han sido eliminadas lógicamente (Soft Delete) para liberar al comensal.
     return prisma.dinerRequestDetail.findMany({
       where: {
         dinerId: { in: dinerIds },
         request: {
           date: date,
-          shiftType: shiftType
+          shiftType: shiftType,
+          deletedAt: null
         }
       },
       include: {
-        diner: { select: { id: true, name: true, cedula: true } }
+        request: true,
+        diner: true
       }
     })
   },
 
-  async createWithDetails(data: Omit<DinerRequest, 'id' | 'createdAt' | 'updatedAt' | 'approvedById'>, dinerIds: number[]) {
+  async createWithDetails(data: Omit<DinerRequest, 'id' | 'createdAt' | 'updatedAt'>, dinersInput: { id: number, quantity: number, modality?: string }[]) {
     // Uso de transacciones interactivas para garantizar atomicidad
     return prisma.$transaction(async (tx) => {
       
@@ -58,27 +81,32 @@ export const dinerRequestRepository = {
         data: {
           date: data.date,
           shiftType: data.shiftType,
-          status: data.status,
+          status: data.status || 'PENDING',
           batchCode: data.batchCode,
-          isExtraordinary: data.isExtraordinary,
           createdById: data.createdById,
+          approvedById: data.approvedById,
           diningRoomId: data.diningRoomId
         }
       })
 
       // 2. Buscar los datos de dieta de cada comensal para arrastrar el rationType
+      const dinerIds = dinersInput.map(d => d.id)
       const diners = await tx.diner.findMany({
         where: { id: { in: dinerIds } },
         select: { id: true, rationType: true }
       })
 
       // 3. Crear los detalles masivos
-      const detailsData = diners.map(diner => ({
-        requestId: request.id,
-        dinerId: diner.id,
-        rationType: diner.rationType, // Se arrastra automáticamente del perfil
-        modality: 'DINE_IN' // Valor por defecto
-      }))
+      const detailsData = diners.map(diner => {
+        const input = dinersInput.find(di => di.id === diner.id)
+        return {
+          requestId: request.id,
+          dinerId: diner.id,
+          rationType: diner.rationType, // Se arrastra automáticamente del perfil
+          modality: input?.modality || 'DINE_IN', // Toma el flag del input o por defecto en bandeja
+          quantity: input?.quantity || 1
+        }
+      })
 
       await tx.dinerRequestDetail.createMany({
         data: detailsData
@@ -99,10 +127,24 @@ export const dinerRequestRepository = {
   },
 
   async deleteWithDetails(id: number) {
-    // Cascade delete is configured in DB, but just to be sure we delete explicitly or trust cascade.
-    // Prisma schema has `onDelete: Cascade` on `DinerRequestDetail.requestId`.
-    return prisma.dinerRequest.delete({
-      where: { id }
+    // Soft Delete
+    return prisma.dinerRequest.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    })
+  },
+
+  async deleteManyWithDetails(ids: number[]) {
+    // Soft Delete Masivo
+    return prisma.dinerRequest.updateMany({
+      where: { id: { in: ids } },
+      data: { deletedAt: new Date() }
+    })
+  },
+
+  async findManyByIds(ids: number[]) {
+    return prisma.dinerRequest.findMany({
+      where: { id: { in: ids } }
     })
   }
 

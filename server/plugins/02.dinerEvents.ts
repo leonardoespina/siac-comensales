@@ -18,78 +18,12 @@ export default defineNitroPlugin((nitroApp) => {
     if (io) io.emit('diner:sync', { action: 'delete', diner: { id: payload.id } })
   })
 
-  // 2. Solicitudes de Comida - Creadas (Notificar a Aprobadores)
+  // 2. Solicitudes de Comida - Creadas
+  // NOTA: Como la empresa decidió que NO habrá flujo de aprobación, las solicitudes
+  // nacen APROBADAS. Ya no es necesario notificar a nadie para que apruebe.
   eventBus.on('dinerRequest:created', async (payload) => {
     try {
-      // payload.subdependencyId en realidad es el createdById en el servicio actualmente.
-      // Vamos a obtener al usuario creador para saber su área.
-      const creator = await prisma.user.findUnique({
-        where: { id: payload.subdependencyId }
-      })
-
-      if (!creator) return
-
-      // Buscar a los administradores de la dependencia/subdependencia o administradores globales
-      const approvers = await prisma.user.findMany({
-        where: {
-          active: true,
-          OR: [
-            // Aprobadores del área específica
-            {
-              subdependencyId: creator.subdependencyId,
-              role: {
-                permissions: {
-                  some: {
-                    module: { code: 'DINERS' }, // o DINERS_APPROVAL si existiera
-                    canUpdate: true
-                  }
-                }
-              }
-            },
-            // Administradores de la dependencia superior
-            {
-              dependencyId: creator.dependencyId,
-              subdependencyId: null, // Gerente principal
-              role: {
-                permissions: {
-                  some: {
-                    module: { code: 'DINERS' },
-                    canUpdate: true
-                  }
-                }
-              }
-            },
-            // Administradores Globales
-            {
-              role: {
-                permissions: {
-                  some: {
-                    module: { code: 'GLOBAL_ACCESS' },
-                    canRead: true
-                  }
-                }
-              }
-            }
-          ]
-        }
-      })
-
-      for (const approver of approvers) {
-        // Evitar auto-notificarse si el creador también es aprobador
-        if (approver.id === creator.id && approvers.length > 1) continue
-
-        const notif = await prisma.notification.create({
-          data: {
-            userId: approver.id,
-            title: 'Nueva Solicitud de Comida',
-            message: `Se ha registrado una solicitud #${payload.requestId} que requiere aprobación.`,
-            link: '/diners/requests' // Ajustar según la ruta real del frontend
-          }
-        })
-        if (io) {
-          io.to(`user_${approver.id}`).emit('notification', notif)
-        }
-      }
+      console.log(`Solicitud ${payload.requestId} auto-aprobada registrada con éxito.`)
     } catch (e) {
       console.error('Error procesando evento dinerRequest:created', e)
     }

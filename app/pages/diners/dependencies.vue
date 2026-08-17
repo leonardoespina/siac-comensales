@@ -196,9 +196,12 @@ onMounted(() => {
             dense
           />
           <q-input v-model="formDataSub.name" label="Nombre" outlined dense @keyup.enter="submitSubdependency" />
+          <div class="q-mt-md">
+            <q-toggle v-model="formDataSub.allowsBulkRequests" label="Permitir Peticiones Masivas" color="primary" />
+          </div>
         </q-card-section>
         <q-card-actions align="right">
-          <q-btn flat label="Cancelar" color="grey" v-close-popup />
+          <q-btn flat label="Cancelar" color="negative" v-close-popup />
           <q-btn flat label="Guardar" color="primary" @click="submitSubdependency" :loading="store.isLoading" />
         </q-card-actions>
       </q-card>

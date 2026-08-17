@@ -115,7 +115,7 @@ const CATEGORIES = {
   },
   SECURITY: {
     label: '⚙️ Seguridad y Estructura Organizacional',
-    codes: ['SECURITY', 'BIOMETRIC', 'DEPENDENCIES', 'AUDIT', 'GLOBAL_ACCESS']
+    codes: ['SECURITY', 'BIOMETRIC', 'DEPENDENCIES', 'AUDIT', 'GLOBAL_ACCESS', 'MEAL_SCHEDULES']
   }
 }
 

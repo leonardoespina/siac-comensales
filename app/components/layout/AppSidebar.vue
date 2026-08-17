@@ -39,6 +39,11 @@ const auth = useAuthStore()
           <q-item-section avatar><q-icon name="fingerprint" size="sm" /></q-item-section>
           <q-item-section>Comensales Físicos</q-item-section>
         </q-item>
+
+        <q-item clickable v-ripple to="/diners/dispatch" active-class="text-primary" v-if="auth.hasPermission('DINERS_REQUESTS', 'canRead')">
+          <q-item-section avatar><q-icon name="meeting_room" size="sm" /></q-item-section>
+          <q-item-section>Despacho en Puerta</q-item-section>
+        </q-item>
       </q-list>
     </q-expansion-item>
 

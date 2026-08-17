@@ -106,6 +106,13 @@ export const useDinersStore = defineStore('diners', {
       }
     },
     
+    async processDispatch(cedula: string, diningRoomId: number) {
+      return await $fetch('/api/dispatch/identify', {
+        method: 'POST',
+        body: { cedula, diningRoomId }
+      })
+    },
+    
     async saveBiometricTemplates(dinerId: number, templates: string[]) {
       this.isLoading = true
       try {
