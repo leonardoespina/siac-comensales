@@ -1,7 +1,7 @@
 <template>
   <q-page class="q-pa-lg">
-    <!-- Pantalla Principal del Kiosco -->
-    <div class="row q-col-gutter-md justify-center" v-if="overlayStatus === 'idle'">
+    <!-- Pantalla Principal del Kiosco (siempre visible) -->
+    <div class="row q-col-gutter-md justify-center">
       <div class="col-12 col-md-8 col-lg-6">
         <q-card class="shadow-4 bg-white rounded-borders">
           <!-- Encabezado -->
@@ -13,6 +13,22 @@
             </div>
             <div class="text-subtitle2" v-else>Control de acceso y entrega de bandejas en puerta</div>
           </q-card-section>
+
+          <!-- Banner de Resultado (visible solo cuando hay respuesta) -->
+          <q-banner
+            v-if="overlayStatus !== 'idle'"
+            :class="overlayStatus === 'success' ? 'bg-positive text-white' : 'bg-negative text-white'"
+            class="q-px-lg q-py-md"
+          >
+            <template v-slot:avatar>
+              <q-icon
+                :name="overlayStatus === 'success' ? 'check_circle' : 'cancel'"
+                size="48px"
+              />
+            </template>
+            <div class="text-h6 text-weight-bold">{{ overlayTitle }}</div>
+            <div class="text-body1">{{ overlayMessage }}</div>
+          </q-banner>
 
           <!-- Animación Biométrica Continua -->
           <q-card-section class="text-center q-py-xl bg-grey-1">
@@ -33,7 +49,7 @@
             </div>
             
             <div class="text-h4 text-dark q-mt-md">
-              {{ isReaderConnected ? (isVerifying ? 'Analizando Huella...' : 'Coloque su dedo') : 'Lector Desconectado' }}
+              {{ isReaderConnected ? 'Coloque su dedo' : 'Lector Desconectado' }}
             </div>
             <div class="text-body1 text-grey-7 q-mt-sm">
               {{ isReaderConnected ? 'El sistema está esperando automáticamente' : 'Verifique la conexión USB del sensor U.are.U 5160' }}
@@ -78,19 +94,6 @@
             </q-form>
           </q-card-section>
         </q-card>
-      </div>
-    </div>
-
-    <!-- Overlay de Éxito o Error (Oculta la pantalla principal) -->
-    <div 
-      v-else 
-      class="fixed-full flex flex-center z-max"
-      :class="overlayStatus === 'success' ? 'bg-positive text-white' : 'bg-negative text-white'"
-    >
-      <div class="text-center">
-        <q-icon :name="overlayStatus === 'success' ? 'check_circle' : 'cancel'" size="150px" class="q-mb-lg" />
-        <div class="text-h2 text-weight-bold q-mb-md">{{ overlayTitle }}</div>
-        <div class="text-h4">{{ overlayMessage }}</div>
       </div>
     </div>
 
