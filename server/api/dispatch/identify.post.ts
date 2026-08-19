@@ -28,8 +28,10 @@ export default defineApiHandler(async (event) => {
   // 1. Obtener la hora actual de Venezuela
   const now = dayjs().tz('America/Caracas')
   const currentTimeStr = now.format('HH:mm') // Formato 24h para comparación fácil
-  const todayStart = now.startOf('day').toDate()
-  const todayEnd = now.endOf('day').toDate()
+  
+  // Para comparar con Prisma que guarda las fechas a la medianoche UTC exacta (T00:00:00.000Z)
+  const todayStart = dayjs.utc(now.format('YYYY-MM-DD')).toDate()
+  const todayEnd = dayjs.utc(now.format('YYYY-MM-DD')).endOf('day').toDate()
 
   // 2. Buscar comensal
   const diner = await prisma.diner.findUnique({
@@ -111,14 +113,21 @@ export default defineApiHandler(async (event) => {
       matchedShiftSchedule = schedule
       break // Encontramos el turno válido actual
     } else {
-      // Guardamos la información de sus horarios para darle un mensaje claro
-      upcomingShiftMessage += `[${schedule.shiftType}: ${schedule.startTime}-${schedule.endTime}] `
+      // Solo guardamos en el mensaje si el turno es en el futuro para hoy
+      if (nowTime.isBefore(end)) {
+        upcomingShiftMessage += `[${schedule.shiftType}: ${start.format('hh:mm A')} - ${end.format('hh:mm A')}] `
+      }
     }
   }
 
   // Si no hizo match con la hora actual, le decimos en qué horario debe venir
   if (!matchedDetail) {
-    throw new DomainError(`Estás fuera de horario. Tus turnos aprobados son: ${upcomingShiftMessage.trim()}`, 403, 'OUT_OF_SCHEDULE')
+    const trimmedMessage = upcomingShiftMessage.trim()
+    if (trimmedMessage === '') {
+      throw new DomainError('Estás fuera de horario. Ya no tienes más turnos disponibles para el resto del día.', 403, 'OUT_OF_SCHEDULE')
+    } else {
+      throw new DomainError(`Estás fuera de horario. Tu próximo turno es: ${trimmedMessage}`, 403, 'OUT_OF_SCHEDULE')
+    }
   }
 
   // 7. Verificar si ese turno específico ya fue despachado

@@ -16,9 +16,15 @@
 
           <!-- Animación Biométrica Continua -->
           <q-card-section class="text-center q-py-xl bg-grey-1">
-            <!-- Icono animado según estado -->
+            <!-- Icono animado o Imagen de Huella según estado -->
             <div class="q-mb-md">
+              <img 
+                v-if="capturedImage" 
+                :src="capturedImage" 
+                style="height: 120px; object-fit: contain; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" 
+              />
               <q-icon 
+                v-else
                 name="fingerprint" 
                 size="120px" 
                 :color="isReaderConnected ? (isVerifying ? 'primary' : 'positive') : 'grey-5'"
@@ -142,7 +148,8 @@ const {
   saveDiningRoomSelection,
   processManualDispatch,
   clearSearch,
-  stopKioskLoop
+  stopKioskLoop,
+  capturedImage
 } = useDispatchManagement()
 
 const tempDiningRoomId = ref<number | null>(null)

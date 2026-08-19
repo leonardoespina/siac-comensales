@@ -13,7 +13,8 @@ export function useDispatchManagement() {
     startMonitoring,
     stopMonitoring,
     verifyFingerprint,
-    cancelOperation
+    cancelOperation,
+    capturedImage
   } = useBiometrics()
 
   const searchCedula = ref('')
@@ -42,7 +43,9 @@ export function useDispatchManagement() {
     }
 
     try {
-      diningRooms.value = await $fetch('/api/dining-rooms')
+      const allRooms = await $fetch<any[]>('/api/dining-rooms')
+      // Filtramos para asegurar que incluso los súper usuarios solo vean los comedores activos en los selectores operativos
+      diningRooms.value = allRooms.filter(dr => dr.active)
       const isValid = diningRooms.value.some(dr => dr.id === selectedDiningRoomId.value)
       if (!savedId || !isValid) {
         selectedDiningRoomId.value = null
@@ -191,6 +194,7 @@ export function useDispatchManagement() {
     saveDiningRoomSelection,
     processManualDispatch,
     clearSearch,
-    stopKioskLoop
+    stopKioskLoop,
+    capturedImage: readonly(capturedImage)
   }
 }
