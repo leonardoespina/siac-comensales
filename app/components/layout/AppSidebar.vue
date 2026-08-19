@@ -22,7 +22,7 @@ const auth = useAuthStore()
     <q-expansion-item
       icon="groups"
       label="Gestión de Comensales"
-      v-if="auth.isAuthenticated && (auth.hasPermission('DINERS', 'canRead') || auth.hasPermission('DINERS_REQUESTS', 'canRead') || auth.hasPermission('MY_SQUADS', 'canRead'))"
+      v-if="auth.isAuthenticated && (auth.hasPermission('DINERS', 'canRead') || auth.hasPermission('DINERS_REQUESTS', 'canRead') || auth.hasPermission('MY_SQUADS', 'canRead') || auth.hasPermission('EXTRAORDINARY', 'canRead'))"
     >
       <q-list class="q-pl-lg">
         <q-item clickable v-ripple to="/diners/requests" active-class="text-primary" v-if="auth.hasPermission('DINERS_REQUESTS', 'canRead') || auth.hasPermission('DINERS_REQUESTS', 'canCreate')">
@@ -35,14 +35,40 @@ const auth = useAuthStore()
           <q-item-section>Mis Cuadrillas</q-item-section>
         </q-item>
         
+        <q-item clickable v-ripple to="/diners/dispatch" active-class="bg-blue-1 text-primary" v-if="auth.hasPermission('DINERS_REQUESTS', 'canRead')">
+          <q-item-section avatar><q-icon name="meeting_room" size="sm" /></q-item-section>
+          <q-item-section>Despacho Kiosco</q-item-section>
+        </q-item>
+
+        <q-item clickable v-ripple to="/extraordinary" active-class="bg-orange-1 text-orange-9" v-if="auth.hasPermission('EXTRAORDINARY', 'canRead')">
+          <q-item-section avatar><q-icon name="badge" size="sm" /></q-item-section>
+          <q-item-section>Visitas Extras</q-item-section>
+        </q-item>
+
         <q-item clickable v-ripple to="/diners/workers" active-class="text-primary" v-if="auth.hasPermission('DINERS', 'canRead')">
           <q-item-section avatar><q-icon name="fingerprint" size="sm" /></q-item-section>
           <q-item-section>Comensales Físicos</q-item-section>
         </q-item>
 
-        <q-item clickable v-ripple to="/diners/dispatch" active-class="text-primary" v-if="auth.hasPermission('DINERS_REQUESTS', 'canRead')">
-          <q-item-section avatar><q-icon name="meeting_room" size="sm" /></q-item-section>
-          <q-item-section>Despacho en Puerta</q-item-section>
+        <q-item clickable v-ripple to="/diners/assisted" active-class="bg-blue-1 text-primary">
+          <q-item-section avatar>
+            <q-icon name="support_agent" />
+          </q-item-section>
+          <q-item-section>Despacho Asistido</q-item-section>
+        </q-item>
+        
+        <q-item clickable v-ripple to="/diners/dispatch-history" active-class="bg-blue-1 text-primary">
+          <q-item-section avatar>
+            <q-icon name="history" />
+          </q-item-section>
+          <q-item-section>Historial de Despachos</q-item-section>
+        </q-item>
+        
+        <q-item clickable v-ripple to="/diners/massive" active-class="bg-blue-1 text-primary" v-if="auth.hasPermission('MASSIVE_DISPATCH', 'canRead') || auth.hasPermission('GLOBAL_ACCESS', 'canRead')">
+          <q-item-section avatar>
+            <q-icon name="takeout_dining" />
+          </q-item-section>
+          <q-item-section>Retiros Masivos</q-item-section>
         </q-item>
       </q-list>
     </q-expansion-item>
@@ -115,6 +141,20 @@ const auth = useAuthStore()
         <q-item clickable v-ripple to="/security/settings" active-class="text-primary" v-if="auth.hasPermission('SECURITY', 'canUpdate')">
           <q-item-section avatar><q-icon name="settings" size="sm" /></q-item-section>
           <q-item-section>Configuraciones Globales</q-item-section>
+        </q-item>
+      </q-list>
+    </q-expansion-item>
+
+    <!-- Menú de Reportes -->
+    <q-expansion-item
+      icon="analytics"
+      label="Reportes y Estadísticas"
+      v-if="auth.isAuthenticated && (auth.hasPermission('REPORTS', 'canRead') || auth.hasPermission('GLOBAL_ACCESS', 'canRead') || auth.hasPermission('DINERS_REQUESTS', 'canRead'))"
+    >
+      <q-list class="q-pl-lg">
+        <q-item clickable v-ripple to="/reports/master" active-class="bg-blue-1 text-primary">
+          <q-item-section avatar><q-icon name="summarize" size="sm" /></q-item-section>
+          <q-item-section>Reporte Maestro (Kardex)</q-item-section>
         </q-item>
       </q-list>
     </q-expansion-item>
