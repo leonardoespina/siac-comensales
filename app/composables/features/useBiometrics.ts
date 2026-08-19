@@ -11,6 +11,7 @@ export function useBiometrics() {
   
   let statusInterval: any = null
   let abortController: AbortController | null = null
+  const capturedImage = ref<string | null>(null)
 
   // ── MONITOREO DE ESTADO ──────────────────────────────────────────────────
   const checkStatus = async () => {
@@ -42,6 +43,7 @@ export function useBiometrics() {
     }
 
     isCapturing.value = true
+    capturedImage.value = null
     enrollmentSamples.value = []
     abortController = new AbortController()
     
@@ -52,6 +54,9 @@ export function useBiometrics() {
         if (enrollmentSamples.value.length === 0) {
           // Paso 1: Captura inicial ciega
           const res = await $fetch<any>(`${LOCAL_BIO_API}/capture`, { signal: abortController.signal })
+          if (res.base64Image) {
+            capturedImage.value = `data:image/png;base64,${res.base64Image}`
+          }
           if (res.success && res.fmdBase64) {
              fmd = res.fmdBase64
           } else {
@@ -66,6 +71,9 @@ export function useBiometrics() {
             body: { templates: [enrollmentSamples.value[0]] },
             signal: abortController.signal
           })
+          if (res.base64Image) {
+            capturedImage.value = `data:image/png;base64,${res.base64Image}`
+          }
           if (res.success) {
             if (res.match && res.fmdBase64) {
               fmd = res.fmdBase64
@@ -134,6 +142,7 @@ export function useBiometrics() {
     }
 
     isVerifying.value = true
+    capturedImage.value = null
     abortController = new AbortController()
 
     try {
@@ -142,6 +151,10 @@ export function useBiometrics() {
         body: { templates: candidateTemplates },
         signal: abortController.signal
       })
+      
+      if (response.base64Image) {
+        capturedImage.value = `data:image/png;base64,${response.base64Image}`
+      }
 
       if (response.success && response.match) {
         return response.matchedIndex !== undefined ? response.matchedIndex : 0
@@ -174,6 +187,7 @@ export function useBiometrics() {
     }
     isCapturing.value = false
     isVerifying.value = false
+    capturedImage.value = null
   }
 
   // ── LÓGICA DE UI (Movida desde el componente para mantenerlo delgado) ──
@@ -213,6 +227,7 @@ export function useBiometrics() {
     enrollFingerprint,
     verifyFingerprint,
     cancelOperation,
-    getUiState
+    getUiState,
+    capturedImage
   }
 }

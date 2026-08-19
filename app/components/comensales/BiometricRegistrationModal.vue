@@ -52,9 +52,8 @@ const handleFingerprintCaptured = async (templateBase64: string) => {
   if (!props.dinerId) return
   
   try {
-    // Obtenemos los templates existentes (si los hay) y agregamos el nuevo
-    const existingTemplates = await dinersStore.fetchBiometricTemplates(props.dinerId)
-    const updatedTemplates = [...existingTemplates, templateBase64]
+    // Al actualizar, reemplazamos la huella anterior por la nueva en lugar de acumular huellas defectuosas
+    const updatedTemplates = [templateBase64]
     
     await dinersStore.saveBiometricTemplates(props.dinerId, updatedTemplates)
     $q.notify({ type: 'positive', message: 'Huella registrada y vinculada a ' + props.dinerName })
@@ -62,7 +61,7 @@ const handleFingerprintCaptured = async (templateBase64: string) => {
     emit('saved')
     isOpen.value = false
   } catch (error: any) {
-    $q.notify({ type: 'negative', message: 'Error al vincular la huella al comensal.' })
+    $q.notify({ type: 'negative', message: 'Error al guardar la huella' })
   }
 }
 </script>

@@ -26,6 +26,7 @@ async function main() {
     { code: 'MEAL_SCHEDULES', name: 'Horarios de Comedor' },
     { code: 'SITES', name: 'Gestión de Sedes' },
     { code: 'AUDIT', name: 'Auditoría del Sistema' },
+    { code: 'MASSIVE_DISPATCH', name: 'Despacho Masivo (Viandas)' },
     { code: 'GLOBAL_ACCESS', name: 'Acceso Global sin Restricciones' }
   ]
 

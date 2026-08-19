@@ -12,8 +12,5 @@ export default defineApiHandler(async (event) => {
   const filterByDependencyId = user.dependencyId ? user.dependencyId : null
 
   const deps = await dependencyRepo.getAllDependencies(false, filterByDependencyId)
-  if (deps.length > 0) {
-    console.log('DEBUG DEPS:', JSON.stringify(deps[0].subdependencies, null, 2))
-  }
   return deps
 })

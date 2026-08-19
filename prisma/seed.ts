@@ -32,7 +32,8 @@ async function main() {
     { code: 'REPORT_RECEPTIONS', name: 'Reporte: Matriz de Recepciones' },
     { code: 'POSITIONS', name: 'Catálogo de Cargos' },
     { code: 'DINERS', name: 'Directorio de Comensales' },
-    { code: 'DISPATCH', name: 'Despacho Rápido' },
+    { code: 'DISPATCH', name: 'Despacho' },
+    { code: 'ASSISTED_DISPATCH', name: 'Despacho Asistido' },
     { code: 'BIOMETRIC', name: 'Gestión Biométrica' },
     { code: 'DEPENDENCIES', name: 'Estructura Organizacional' },
     { code: 'SQUADS', name: 'Catálogo de Cuadrillas' },
@@ -44,8 +45,8 @@ async function main() {
     { code: 'INSTITUTIONS', name: 'Instituciones (Apoyos)' },
     { code: 'AUDIT', name: 'Auditoría del Sistema' },
     { code: 'GLOBAL_ACCESS', name: 'Acceso Global sin Restricciones' },
-    { code: 'APPROVAL_RECEPTIONS', name: 'Firma: Aprobar Recepciones' },
-    { code: 'APPROVAL_TRANSFERS', name: 'Firma: Aprobar Despachos' }
+    { code: 'APPROVAL_TRANSFERS', name: 'Firma: Aprobar Despachos' },
+    { code: 'EXTRAORDINARY', name: 'Visitas y Extraordinarios' }
   ]
 
   const modules = []

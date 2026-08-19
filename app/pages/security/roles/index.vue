@@ -103,7 +103,7 @@ const columns = [
 const CATEGORIES = {
   DINERS: {
     label: '🧑‍🤝‍🧑 Gestión de Comensales y Peticiones',
-    codes: ['DINERS', 'DINERS_REQUESTS', 'MY_SQUADS']
+    codes: ['DINERS', 'DINERS_REQUESTS', 'MY_SQUADS', 'DISPATCH']
   },
   CATALOGS: {
     label: '📋 Catálogos Base del Comedor',

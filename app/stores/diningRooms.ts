@@ -1,8 +1,12 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 export const useDiningRoomsStore = defineStore('diningRooms', () => {
   const diningRooms = ref<any[]>([])
+  
+  // Computed property para ser usada en los selectores operativos
+  const activeDiningRooms = computed(() => diningRooms.value.filter(dr => dr.active))
+
   const isLoading = ref(false)
   const isFetched = ref(false)
 
@@ -50,6 +54,7 @@ export const useDiningRoomsStore = defineStore('diningRooms', () => {
 
   return {
     diningRooms,
+    activeDiningRooms,
     isLoading,
     fetchAll,
     create,

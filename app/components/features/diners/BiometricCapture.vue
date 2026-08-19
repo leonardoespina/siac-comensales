@@ -33,9 +33,15 @@
           track-color="transparent"
           class="absolute-center"
         />
-        <!-- Icono central enmarcado con llenado progresivo -->
+        <!-- Icono central enmarcado con llenado progresivo o imagen real -->
         <q-avatar size="110px" :class="(isCapturing || isVerifying) ? 'bg-blue-1' : 'bg-transparent'">
+          <img 
+            v-if="capturedImage" 
+            :src="capturedImage" 
+            style="width: 80px; height: 80px; object-fit: contain; border-radius: 8px;" 
+          />
           <q-icon 
+            v-else
             name="fingerprint" 
             size="80px" 
             class="fingerprint-icon"
@@ -103,7 +109,8 @@ const {
   enrollFingerprint,
   verifyFingerprint,
   cancelOperation,
-  getUiState
+  getUiState,
+  capturedImage
 } = useBiometrics()
 
 // 1. Obtenemos estado UI directamente desde el composable (Cumple regla de Componente Delgado)

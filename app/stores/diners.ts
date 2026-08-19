@@ -120,6 +120,13 @@ export const useDinersStore = defineStore('diners', {
           method: 'PUT',
           body: { templates }
         })
+        
+        // Actualizar caché local para que otros módulos (ej. Retiro Masivo) vean el cambio inmediatamente
+        const index = this.diners.findIndex(d => d.id === dinerId)
+        if (index !== -1) {
+          (this.diners[index] as any).biometricRecord = result
+        }
+        
         return result
       } finally {
         this.isLoading = false

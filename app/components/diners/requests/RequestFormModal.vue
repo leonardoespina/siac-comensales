@@ -131,7 +131,7 @@
                   </q-card>
 
                   <!-- Tipo de Retiro -->
-                  <q-card flat bordered class="bg-white">
+                  <q-card v-if="form.allowsBulkRequests.value" flat bordered class="bg-white">
                     <q-card-section class="q-pa-sm">
                       <div class="text-caption text-weight-bold text-grey-8 q-mb-xs">Tipo de Retiro</div>
                       <div class="row q-col-gutter-xs">
@@ -154,7 +154,7 @@
                     <div class="text-caption text-weight-bold text-grey-8 q-mb-xs">Comedor:</div>
                     <q-select 
                       v-model="form.filters.value.diningRoomId" 
-                      :options="diningRoomsStore.diningRooms" 
+                      :options="diningRoomsStore.activeDiningRooms" 
                       option-value="id" 
                       option-label="name" 
                       emit-value 
@@ -201,7 +201,7 @@
                 <q-separator />
                 
                 <!-- Tabla Grilla -->
-                <q-card-section class="q-pa-none col scroll">
+                <q-card-section v-if="!form.masterChecks.value['MASIVO']" class="q-pa-none col scroll">
                   <q-table
                     :rows="form.loadedDiners.value"
                     :columns="form.gridColumns.value"
@@ -216,16 +216,13 @@
                     :grid="$q.screen.lt.md"
                   >
                     <template v-slot:body-cell="props">
-                      <q-td :props="props" v-if="form.activeShifts.value.includes(props.col.name) || props.col.name === 'MASIVO'">
+                      <q-td :props="props" v-if="form.activeShifts.value.includes(props.col.name)">
                         <q-checkbox v-model="form.gridState.value[props.row.id][props.col.name]" dense color="primary" :disable="form.isViewMode.value" />
-                      </q-td>
-                      <q-td :props="props" v-else-if="props.col.name === 'quantity'">
-                        <q-input v-model.number="form.quantities.value[props.row.id]" type="number" dense outlined min="1" class="q-mx-auto" style="width: 70px;" :readonly="form.isViewMode.value" />
                       </q-td>
                       <q-td :props="props" v-else-if="props.col.name === 'comedor'">
                         <q-select 
                           v-model="form.dinerDiningRooms.value[props.row.id]"
-                          :options="diningRoomsStore.diningRooms"
+                          :options="diningRoomsStore.activeDiningRooms"
                           option-value="id"
                           option-label="name"
                           emit-value
@@ -239,29 +236,6 @@
                       </q-td>
                       <q-td :props="props" v-else-if="props.col.name === 'nro'">
                         {{ props.rowIndex + 1 }}
-                      </q-td>
-                      <q-td :props="props" v-else-if="props.col.name === 'cedula' && form.allowsBulkRequests.value">
-                        <q-select
-                          :model-value="props.row"
-                          :options="form.availableProxyDiners.value"
-                          option-label="cedula"
-                          option-value="id"
-                          use-input
-                          dense
-                          outlined
-                          bg-color="white"
-                          @update:model-value="(val) => form.swapDiner(props.row.id, val)"
-                          :readonly="form.isViewMode.value"
-                        >
-                          <template v-slot:option="scope">
-                            <q-item v-bind="scope.itemProps">
-                              <q-item-section>
-                                <q-item-label>{{ scope.opt.cedula }}</q-item-label>
-                                <q-item-label caption>{{ scope.opt.name }}</q-item-label>
-                              </q-item-section>
-                            </q-item>
-                          </template>
-                        </q-select>
                       </q-td>
                       <q-td :props="props" v-else>
                         {{ props.value }}
@@ -280,7 +254,7 @@
                           <q-card-section class="q-pa-sm">
                             <q-select 
                               v-model="form.dinerDiningRooms.value[props.row.id]"
-                              :options="diningRoomsStore.diningRooms"
+                              :options="diningRoomsStore.activeDiningRooms"
                               option-value="id"
                               option-label="name"
                               emit-value
@@ -294,23 +268,13 @@
                           </q-card-section>
                           <q-separator />
                           <q-card-section class="q-pa-sm row q-col-gutter-xs">
-                            <div class="col-6" v-for="shift in form.activeShifts.value" :key="shift">
+                            <div class="col-12" v-for="shift in form.activeShifts.value" :key="shift">
                               <q-checkbox 
                                 v-model="form.gridState.value[props.row.id][shift]" 
                                 :label="shift" 
                                 dense 
                                 size="sm" 
                                 color="primary"
-                                :disable="form.isViewMode.value"
-                              />
-                            </div>
-                            <div class="col-6">
-                              <q-checkbox 
-                                v-model="form.gridState.value[props.row.id]['MASIVO']" 
-                                label="Masivo" 
-                                dense 
-                                size="sm" 
-                                color="secondary"
                                 :disable="form.isViewMode.value"
                               />
                             </div>
@@ -326,6 +290,77 @@
                       </div>
                     </template>
                   </q-table>
+                </q-card-section>
+                
+                <!-- Vista Masiva -->
+                <q-card-section v-else class="col scroll flex flex-center bg-white">
+                  <div class="column items-center q-pa-xl text-center full-width" style="max-width: 600px">
+                    <q-icon name="groups" size="80px" color="primary" class="q-mb-md" />
+                    <div class="text-h5 text-weight-bold text-primary">Modo de Retiro Masivo (Mara)</div>
+                    <div class="text-subtitle1 text-grey-7 q-mb-xl">Se emitirá una única autorización global para toda la cuadrilla.</div>
+
+                    <q-card bordered class="shadow-1 full-width q-pa-lg text-left bg-grey-1">
+                      <div class="text-subtitle2 text-weight-bold q-mb-sm">Persona Autorizada (Pondrá la huella)</div>
+                      <q-select 
+                        v-model="form.bulkAuthorizedDinerId.value"
+                        :options="proxyDinersOptions"
+                        option-value="id"
+                        option-label="name"
+                        emit-value
+                        map-options
+                        use-input
+                        @filter="filterProxyDiners"
+                        outlined
+                        bg-color="white"
+                        class="q-mb-md"
+                        placeholder="Buscar por cédula o nombre..."
+                        :readonly="form.isViewMode.value"
+                      >
+                        <template v-slot:no-option>
+                          <q-item>
+                            <q-item-section class="text-grey">
+                              No se encontraron personas con huella en la gerencia
+                            </q-item-section>
+                          </q-item>
+                        </template>
+                        <template v-slot:option="scope">
+                          <q-item v-bind="scope.itemProps">
+                            <q-item-section>
+                              <q-item-label>{{ scope.opt.name }}</q-item-label>
+                              <q-item-label caption>C.I: {{ scope.opt.cedula }}</q-item-label>
+                            </q-item-section>
+                          </q-item>
+                        </template>
+                      </q-select>
+
+                      <div class="text-subtitle2 text-weight-bold q-mb-sm">Cantidades por Turno</div>
+                      <div v-for="shift in form.activeShifts.value" :key="shift">
+                        <div v-if="form.masterChecks.value[shift]" class="row items-center q-mb-sm">
+                          <div class="col-4 text-body1">{{ shift }}</div>
+                          <div class="col-8">
+                            <q-input 
+                              v-model.number="form.bulkQuantities.value[shift]"
+                              type="number"
+                              outlined
+                              dense
+                              bg-color="white"
+                              min="1"
+                              :readonly="form.isViewMode.value"
+                            >
+                              <template v-slot:append>
+                                <q-icon name="restaurant" />
+                              </template>
+                            </q-input>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <!-- Mensaje si no hay turnos seleccionados -->
+                      <div v-if="!form.activeShifts.value.some(s => form.masterChecks.value[s])" class="text-grey-6 q-pa-sm text-center">
+                        Debe seleccionar al menos un turno en el panel izquierdo.
+                      </div>
+                    </q-card>
+                  </div>
                 </q-card-section>
               </q-card>
             </div>
@@ -384,6 +419,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref, watch } from 'vue'
 import { useDinerRequestForm } from '~/composables/features/useDinerRequestForm'
 import { useDinerRequestHistory } from '~/composables/features/useDinerRequestHistory'
 import { useAuthStore } from '~/stores/auth'
@@ -397,6 +433,45 @@ const history = useDinerRequestHistory()
 const auth = useAuthStore()
 const dependenciesStore = useDependenciesStore()
 const diningRoomsStore = useDiningRoomsStore()
+const dinersStore = useDinersStore()
+
+const proxyDinersOptions = ref<any[]>([])
+
+// Asegurar que las opciones estén disponibles para map-options (especialmente al editar)
+watch(() => form.availableProxyDiners.value, (newVals) => {
+  if (proxyDinersOptions.value.length === 0 && newVals.length > 0) {
+    proxyDinersOptions.value = newVals
+  }
+}, { immediate: true })
+
+// REPARACIÓN: Si se carga una solicitud existente (o un ID que no está en la lista visible),
+// inyectar ese comensal específico en las opciones para que q-select pueda resolver su nombre.
+watch(() => form.bulkAuthorizedDinerId.value, (newId) => {
+  if (newId) {
+    const exists = proxyDinersOptions.value.find(d => d.id === newId)
+    if (!exists) {
+      const dinerFromStore = dinersStore.diners.find(d => d.id === newId)
+      if (dinerFromStore) {
+        proxyDinersOptions.value = [dinerFromStore, ...proxyDinersOptions.value]
+      }
+    }
+  }
+}, { immediate: true })
+
+function filterProxyDiners(val: string, update: (fn: () => void) => void) {
+  if (val === '') {
+    update(() => {
+      proxyDinersOptions.value = form.availableProxyDiners.value
+    })
+    return
+  }
+  update(() => {
+    const needle = val.toLowerCase()
+    proxyDinersOptions.value = form.availableProxyDiners.value.filter(
+      (v: any) => v.name.toLowerCase().indexOf(needle) > -1 || v.cedula.toLowerCase().indexOf(needle) > -1
+    )
+  })
+}
 
 async function onSubmit() {
   form.prepareSubmit()
