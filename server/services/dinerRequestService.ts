@@ -132,15 +132,21 @@ export const dinerRequestService = {
       }
 
       // 1.5 Validar Anti-Duplicados (Solapamiento)
-      const dinerIds = data.diners.map(d => d.id)
-      const overlaps = await dinerRequestRepository.findOverlappingDiners(targetDate, data.shiftType, dinerIds)
+      // Extraemos solo los comensales que van a tener una comida individual (DINE_IN).
+      // Si la modalidad es TAKE_AWAY (masivo), saltamos la validación porque son solo mensajeros
+      const dineInDiners = data.diners.filter(d => d.modality !== 'TAKE_AWAY')
       
-      if (overlaps.length > 0) {
-        const names = overlaps.map(o => o.diner.name).join(', ')
-        throw createError({
-          statusCode: 409,
-          statusMessage: `Conflicto: Los siguientes comensales ya tienen solicitud para el ${dateStr} (${data.shiftType}): ${names}`
-        })
+      if (dineInDiners.length > 0) {
+        const dinerIds = dineInDiners.map(d => d.id)
+        const overlaps = await dinerRequestRepository.findOverlappingDiners(targetDate, data.shiftType, dinerIds)
+        
+        if (overlaps.length > 0) {
+          const names = overlaps.map(o => o.diner.name).join(', ')
+          throw createError({
+            statusCode: 409,
+            statusMessage: `Conflicto: Los siguientes comensales ya tienen su comida individual (o están duplicados) para el ${dateStr} (${data.shiftType}): ${names}`
+          })
+        }
       }
 
       const req = await dinerRequestRepository.createWithDetails({
@@ -150,7 +156,8 @@ export const dinerRequestService = {
         batchCode: batchCode,
         createdById: userId,
         approvedById: userId,
-        diningRoomId: data.diningRoomId || null
+        diningRoomId: data.diningRoomId || null,
+        targetSubdependencyId: data.targetSubdependencyId || null
       } as any, data.diners)
 
       createdRequests.push(req)
@@ -192,7 +199,6 @@ export const dinerRequestService = {
       throw createError({ statusCode: 400, statusMessage: 'Debe seleccionar al menos un comensal en algún turno.' })
     }
 
-    // Identificamos las requests a actualizar
     let requestsToUpdate: any[] = []
     if (batchOrId.startsWith('SINGLE-')) {
       const id = parseInt(batchOrId.replace('SINGLE-', ''))
@@ -202,10 +208,20 @@ export const dinerRequestService = {
       })
       if (req) requestsToUpdate.push(req)
     } else {
+      console.log(`[updateRequestBatch] Buscando batchCode: ${batchOrId}`)
       requestsToUpdate = await prisma.dinerRequest.findMany({
         where: { batchCode: batchOrId, deletedAt: null },
         include: { details: true }
       })
+      console.log(`[updateRequestBatch] Encontrados activos: ${requestsToUpdate.length}`)
+      
+      if (requestsToUpdate.length === 0) {
+        // Buscar para ver si está borrado
+        const allWithBatch = await prisma.dinerRequest.findMany({
+          where: { batchCode: batchOrId }
+        })
+        console.log(`[updateRequestBatch] Encontrados (incluyendo borrados): ${allWithBatch.length}`)
+      }
     }
 
     if (requestsToUpdate.length === 0) {
@@ -239,32 +255,42 @@ export const dinerRequestService = {
     // Almacenamos el batchCode original para asegurar que la re-creación mantenga todo enlazado
     const actualBatchCode = requestsToUpdate[0].batchCode
     
-    for (const shift of data.shifts) {
-      // Agrupar los comensales de este turno por su comedor individual
-      const groupsByDiningRoom: Record<string, any[]> = {}
-      
-      for (const diner of shift.diners) {
-        // Usa el comedor individual del comensal. Si no lo tiene, usa el comedor global de la petición.
-        const dRoomId = diner.diningRoomId || data.diningRoomId || 'null'
-        if (!groupsByDiningRoom[dRoomId]) groupsByDiningRoom[dRoomId] = []
-        groupsByDiningRoom[dRoomId].push(diner)
-      }
-      
-      for (const dRoomIdStr of Object.keys(groupsByDiningRoom)) {
-        const dinersInGroup = groupsByDiningRoom[dRoomIdStr]
-        const finalDiningRoomId = dRoomIdStr !== 'null' ? parseInt(dRoomIdStr) : undefined
+    try {
+      for (const shift of data.shifts) {
+        // Agrupar los comensales de este turno por su comedor individual
+        const groupsByDiningRoom: Record<string, any[]> = {}
         
-        const res = await this.createRequests({
-          dates: data.dates,
-          shiftType: shift.shiftType,
-          targetSubdependencyId: data.targetSubdependencyId,
-          diningRoomId: finalDiningRoomId,
-          diners: dinersInGroup,
-          batchCode: actualBatchCode || undefined
-        }, userId, hasGlobalBypass, true) // skipTimeValidation = true
-        results.push(res)
+        for (const diner of shift.diners) {
+          // Usa el comedor individual del comensal. Si no lo tiene, usa el comedor global de la petición.
+          const dRoomId = diner.diningRoomId || data.diningRoomId || 'null'
+          if (!groupsByDiningRoom[dRoomId]) groupsByDiningRoom[dRoomId] = []
+          groupsByDiningRoom[dRoomId].push(diner)
+        }
+        
+        for (const dRoomIdStr of Object.keys(groupsByDiningRoom)) {
+          const dinersInGroup = groupsByDiningRoom[dRoomIdStr]
+          const finalDiningRoomId = dRoomIdStr !== 'null' ? parseInt(dRoomIdStr) : undefined
+          
+          const res = await this.createRequests({
+            dates: data.dates,
+            shiftType: shift.shiftType,
+            targetSubdependencyId: data.targetSubdependencyId,
+            diningRoomId: finalDiningRoomId,
+            diners: dinersInGroup,
+            batchCode: actualBatchCode || undefined
+          }, userId, hasGlobalBypass, true) // skipTimeValidation = true
+          results.push(res)
+        }
       }
+    } catch (error) {
+      // ROLLBACK MÁGICO: Restaurar los eliminados si la creación falla (ej. validaciones de duplicados)
+      await prisma.dinerRequest.updateMany({
+        where: { id: { in: idsToDelete } },
+        data: { deletedAt: null }
+      })
+      throw error // Relanzar el error para que la UI lo muestre
     }
+    
     return results
   }
 }

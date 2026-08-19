@@ -31,6 +31,10 @@ export function useDinerRequestForm() {
   const masterChecks = ref<Record<string, boolean>>({})
   const dinerDiningRooms = ref<Record<string, number | null>>({})
 
+  // Nuevas variables para el modo Masivo (Mara)
+  const bulkAuthorizedDinerId = ref<number | null>(null)
+  const bulkQuantities = ref<Record<string, number>>({})
+
   const filters = ref({
     dependencyId: authStore.user?.dependencyId || null as number | null,
     subdependencyId: authStore.user?.subdependencyId || null as number | null,
@@ -133,12 +137,6 @@ export function useDinerRequestForm() {
       { name: 'rationType', label: 'Dieta', align: 'left', field: 'rationType' }
     ]
     
-    const hasBulkInViewMode = isViewMode.value && loadedDiners.value.some(d => quantities.value[d.id] > 1 || gridState.value[d.id]?.['MASIVO'] === true)
-
-    if (allowsBulkRequests.value || hasBulkInViewMode) {
-      baseCols.push({ name: 'quantity', label: 'Cant.', align: 'center', field: 'quantity', style: 'width: 80px' })
-    }
-    
     baseCols.push({ name: 'comedor', label: 'Comedor', align: 'left', field: () => filters.value.diningRoomId ? diningRoomsStore.diningRooms.find(d => d.id === filters.value.diningRoomId)?.name : 'N/A' })
     const shiftCols = activeShifts.value.map(shift => ({
       name: shift,
@@ -146,7 +144,7 @@ export function useDinerRequestForm() {
       align: 'center',
       field: shift
     }))
-    return [...baseCols, ...shiftCols, { name: 'MASIVO', label: 'Masivo', align: 'center', field: 'MASIVO' }] as any[]
+    return [...baseCols, ...shiftCols] as any[]
   })
 
   const filteredSquads = computed(() => {
@@ -168,8 +166,12 @@ export function useDinerRequestForm() {
     return dep?.subdependencies || []
   })
 
+  const isLoadingData = ref(false)
+
   watch(() => filters.value.dependencyId, () => {
-    filters.value.subdependencyId = null
+    if (!isLoadingData.value) {
+      filters.value.subdependencyId = null
+    }
   })
 
   const loadedDiners = ref<any[]>([])
@@ -178,11 +180,23 @@ export function useDinerRequestForm() {
 
   const availableProxyDiners = computed(() => {
     if (!filters.value.dependencyId) return []
-    // Retorna los comensales de la gerencia que tengan huella (legacy) o registro biométrico
-    return dinersStore.diners.filter(d => 
-      (d.fingerprint || d.biometricRecord) && 
-      (filters.value.subdependencyId ? true : true) // Pertenecen a la dependencia ya por filtrado global del store
-    )
+    // Retorna TODOS los comensales de la gerencia (Dependencia) que tengan huella registrada.
+    return dinersStore.diners.filter(d => {
+      let depId = d.dependencyId || d.subdependency?.dependencyId
+      
+      // Si el backend no devolvió el objeto subdependency, lo buscamos en el store global
+      if (!depId && d.subdependencyId) {
+        for (const dep of dependenciesStore.dependencies) {
+          if (dep.subdependencies?.some((sub: any) => sub.id === d.subdependencyId)) {
+            depId = dep.id
+            break
+          }
+        }
+      }
+      
+      // Debe pertenecer a la gerencia Y tener un registro biométrico (huella) o legacy (fingerprint)
+      return depId === filters.value.dependencyId && (d.biometricRecord || d.fingerprint)
+    })
   })
 
   function swapDiner(oldDinerId: number, newDiner: any) {
@@ -257,13 +271,13 @@ export function useDinerRequestForm() {
   }
 
   watch([() => filters.value.subdependencyId, () => filters.value.squadId, () => filters.value.dependencyId], async () => {
-    if (isViewMode.value) return
+    if (isViewMode.value || isLoadingData.value) return
 
     // Para evitar cargar todos los comensales de la empresa de golpe (lo cual crashearía si hay miles),
-    // vamos a buscar al backend específicamente los de la dependencia/subdependencia seleccionada.
-    if (filters.value.subdependencyId) {
-      await dinersStore.fetchAll({ subdependencyId: filters.value.subdependencyId })
-    } else if (filters.value.dependencyId) {
+    // vamos a buscar al backend específicamente los de la dependencia seleccionada (gerencia completa).
+    // Esto es necesario porque el "Retiro Masivo" permite autorizar a CUALQUIER persona de la Gerencia,
+    // así que necesitamos tenerlos a todos en el store local.
+    if (filters.value.dependencyId) {
       await dinersStore.fetchAll({ dependencyId: filters.value.dependencyId })
     } else {
       dinersStore.diners = []
@@ -287,6 +301,14 @@ export function useDinerRequestForm() {
     gridState.value = {}
     quantities.value = {}
     dinerDiningRooms.value = {}
+    
+    // Reset Masivo
+    bulkAuthorizedDinerId.value = null
+    bulkQuantities.value = {}
+    
+    // Limpiar checkboxes globales
+    activeShifts.value = []
+    resetMasterChecks()
   }
 
   function openCreate() {
@@ -299,6 +321,7 @@ export function useDinerRequestForm() {
   }
 
   function loadExistingData(dateGroup: any, editMode: boolean = false) {
+    isLoadingData.value = true
     clearForm()
     isViewMode.value = !editMode
     isEditMode.value = editMode
@@ -356,6 +379,10 @@ export function useDinerRequestForm() {
         // Cargar el flag de Masivo
         if (d.modality === 'TAKE_AWAY') {
           gridState.value[dinerId]['MASIVO'] = true
+          masterChecks.value['MASIVO'] = true
+          masterChecks.value[shift] = true
+          bulkAuthorizedDinerId.value = dinerId
+          bulkQuantities.value[shift] = d.quantity || 1
         } else if (gridState.value[dinerId]['MASIVO'] === undefined) {
           gridState.value[dinerId]['MASIVO'] = false
         }
@@ -367,8 +394,14 @@ export function useDinerRequestForm() {
     
     loadedDiners.value = Array.from(dinersMap.values())
     
-    // Auto-completar los selectores de Dependencia y Subdependencia con el primer comensal real encontrado
-    if (loadedDiners.value.length > 0) {
+    // Auto-completar los selectores de Dependencia y Subdependencia
+    if (firstReq && firstReq.targetSubdependency) {
+      // Si es un retiro Masivo (o alguien guardA3 la subdependencia destino en la tabla),
+      // respetamos esa subdependencia explA-citamente!
+      filters.value.dependencyId = firstReq.targetSubdependency.dependencyId || null
+      filters.value.subdependencyId = firstReq.targetSubdependency.id || null
+    } else if (loadedDiners.value.length > 0) {
+      // Fallback a la antigua heurA-stica (primer comensal de la lista)
       const firstDiner = loadedDiners.value.find(d => d.dependencyId)
       if (firstDiner) {
         filters.value.dependencyId = firstDiner.dependencyId || null
@@ -378,6 +411,11 @@ export function useDinerRequestForm() {
     
     gridState.value = { ...gridState.value } // Forzar actualización reactiva profunda en Vue 3
     isOpen.value = true
+    
+    // Desactivamos la bandera después de que los watchers asíncronos de Vue se hayan disparado
+    setTimeout(() => {
+      isLoadingData.value = false
+    }, 100)
   }
 
   function prepareSubmit() {
@@ -393,16 +431,34 @@ export function useDinerRequestForm() {
       total: 0
     }
 
-    for (const shift of activeShifts.value) {
-      const dinersForShift = loadedDiners.value.filter(d => gridState.value[d.id]?.[shift])
-      if (dinersForShift.length === 0) continue
-
-      let portions = 0
-      for (const d of dinersForShift) {
-        portions += (quantities.value[d.id] || 1)
+    if (masterChecks.value['MASIVO']) {
+      if (!bulkAuthorizedDinerId.value) {
+        notify.warning('Debe seleccionar una persona autorizada para el retiro masivo')
+        return false
       }
-      requestSummary.value.shifts[shift] = portions
-      requestSummary.value.total += portions
+      for (const shift of activeShifts.value) {
+        if (masterChecks.value[shift]) {
+          const qty = bulkQuantities.value[shift] || 1
+          if (qty < 1) {
+            notify.warning(`La cantidad de platos para ${shift} debe ser mayor a 0`)
+            return false
+          }
+          requestSummary.value.shifts[shift] = qty
+          requestSummary.value.total += qty
+        }
+      }
+    } else {
+      for (const shift of activeShifts.value) {
+        const dinersForShift = loadedDiners.value.filter(d => gridState.value[d.id]?.[shift])
+        if (dinersForShift.length === 0) continue
+
+        let portions = 0
+        for (const d of dinersForShift) {
+          portions += (quantities.value[d.id] || 1)
+        }
+        requestSummary.value.shifts[shift] = portions
+        requestSummary.value.total += portions
+      }
     }
 
     if (requestSummary.value.total === 0) {
@@ -425,27 +481,41 @@ export function useDinerRequestForm() {
       const batchCode = `REQ-${dayjs().format('YYMMDD')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`
 
       for (const shift of activeShifts.value) {
-        const dinersForShift = loadedDiners.value.filter(d => gridState.value[d.id]?.[shift])
-          
-        if (dinersForShift.length === 0) continue
-
-        // Agrupar por comedor
-        const groupsByDiningRoom: Record<string, any[]> = {}
+        let groupsByDiningRoom: Record<string, any[]> = {}
         let missingDiningRoom = false
 
-        for (const d of dinersForShift) {
-          const dRoomId = dinerDiningRooms.value[d.id] || filters.value.diningRoomId
+        if (masterChecks.value['MASIVO']) {
+          if (!masterChecks.value[shift]) continue
+          
+          const dRoomId = filters.value.diningRoomId
           if (!dRoomId) {
             missingDiningRoom = true
-            break
+          } else {
+            const key = String(dRoomId)
+            groupsByDiningRoom[key] = [{
+              id: bulkAuthorizedDinerId.value,
+              quantity: bulkQuantities.value[shift] || 1,
+              modality: 'TAKE_AWAY'
+            }]
           }
-          const key = String(dRoomId)
-          if (!groupsByDiningRoom[key]) groupsByDiningRoom[key] = []
-          groupsByDiningRoom[key].push({
-            id: d.id,
-            quantity: quantities.value[d.id] || 1,
-            modality: gridState.value[d.id]?.['MASIVO'] ? 'TAKE_AWAY' : 'DINE_IN'
-          })
+        } else {
+          const dinersForShift = loadedDiners.value.filter(d => gridState.value[d.id]?.[shift])
+          if (dinersForShift.length === 0) continue
+
+          for (const d of dinersForShift) {
+            const dRoomId = dinerDiningRooms.value[d.id] || filters.value.diningRoomId
+            if (!dRoomId) {
+              missingDiningRoom = true
+              break
+            }
+            const key = String(dRoomId)
+            if (!groupsByDiningRoom[key]) groupsByDiningRoom[key] = []
+            groupsByDiningRoom[key].push({
+              id: d.id,
+              quantity: quantities.value[d.id] || 1,
+              modality: gridState.value[d.id]?.['MASIVO'] ? 'TAKE_AWAY' : 'DINE_IN'
+            })
+          }
         }
 
         if (missingDiningRoom) {
@@ -514,27 +584,57 @@ export function useDinerRequestForm() {
       }
     }
 
-    if (selectedDiners.length === 0) {
-      notify.warning('Debe seleccionar al menos un comensal')
-      return
+    if (masterChecks.value['MASIVO']) {
+      if (!bulkAuthorizedDinerId.value) {
+        notify.warning('Debe seleccionar una persona autorizada para el retiro masivo')
+        return
+      }
+      for (const shift of activeShifts.value) {
+        if (masterChecks.value[shift] && (bulkQuantities.value[shift] || 1) < 1) {
+          notify.warning(`La cantidad de platos para ${shift} debe ser mayor a 0`)
+          return
+        }
+      }
+    } else {
+      if (selectedDiners.length === 0) {
+        notify.warning('Debe seleccionar al menos un comensal')
+        return
+      }
     }
 
     try {
       loading.value = true
       
       const shiftsPayload = []
-      for (const shift of activeShifts.value) {
-        const dinersForShift = selectedDiners.filter(d => gridState.value[d.id][shift])
-        if (dinersForShift.length > 0) {
-          shiftsPayload.push({
-            shiftType: shift,
-            diners: dinersForShift.map(d => ({
-              id: d.id,
-              quantity: d.quantity || 1,
-              modality: gridState.value[d.id]['MASIVO'] ? 'TAKEOUT' : 'DINE_IN',
-              diningRoomId: dinerDiningRooms.value[d.id] || filters.value.diningRoomId
-            }))
-          })
+      
+      if (masterChecks.value['MASIVO']) {
+        for (const shift of activeShifts.value) {
+          if (masterChecks.value[shift]) {
+            shiftsPayload.push({
+              shiftType: shift,
+              diners: [{
+                id: bulkAuthorizedDinerId.value,
+                quantity: bulkQuantities.value[shift] || 1,
+                modality: 'TAKE_AWAY',
+                diningRoomId: filters.value.diningRoomId
+              }]
+            })
+          }
+        }
+      } else {
+        for (const shift of activeShifts.value) {
+          const dinersForShift = selectedDiners.filter(d => gridState.value[d.id][shift])
+          if (dinersForShift.length > 0) {
+            shiftsPayload.push({
+              shiftType: shift,
+              diners: dinersForShift.map(d => ({
+                id: d.id,
+                quantity: d.quantity || 1,
+                modality: gridState.value[d.id]['MASIVO'] ? 'TAKEOUT' : 'DINE_IN',
+                diningRoomId: dinerDiningRooms.value[d.id] || filters.value.diningRoomId
+              }))
+            })
+          }
         }
       }
 
@@ -588,6 +688,8 @@ export function useDinerRequestForm() {
     loadExistingData,
     prepareSubmit,
     executeSubmit,
-    submitUpdate
+    submitUpdate,
+    bulkAuthorizedDinerId,
+    bulkQuantities
   }
 }

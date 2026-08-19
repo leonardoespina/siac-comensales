@@ -34,6 +34,7 @@ export const dinerRequestRepository = {
       include: {
         createdBy: { select: { name: true, cedula: true } },
         diningRoom: { select: { name: true } },
+        targetSubdependency: { select: { id: true, dependencyId: true } },
         details: {
           include: {
             diner: { select: { cedula: true, name: true, rationType: true, subdependencyId: true, squadId: true, subdependency: { select: { dependencyId: true } } } }
@@ -59,6 +60,7 @@ export const dinerRequestRepository = {
     return prisma.dinerRequestDetail.findMany({
       where: {
         dinerId: { in: dinerIds },
+        modality: 'DINE_IN', // Solo choca si ya tienen una comida individual
         request: {
           date: date,
           shiftType: shiftType,
@@ -85,7 +87,8 @@ export const dinerRequestRepository = {
           batchCode: data.batchCode,
           createdById: data.createdById,
           approvedById: data.approvedById,
-          diningRoomId: data.diningRoomId
+          diningRoomId: data.diningRoomId,
+          targetSubdependencyId: data.targetSubdependencyId
         }
       })
 

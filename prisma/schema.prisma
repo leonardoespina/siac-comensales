@@ -24,6 +24,7 @@ model MealSchedule {
 
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
@@ -117,6 +118,7 @@ model User {
 
   createdDinerRequests  DinerRequest[] @relation("DinerRequestsCreated")
   approvedDinerRequests DinerRequest[] @relation("DinerRequestsApproved")
+  extraordinaryDispatches ExtraordinaryDispatch[]
 
   @@index([roleId])
   @@index([dependencyId])
@@ -192,6 +194,7 @@ model DiningRoom {
 
 
   dinerRequests DinerRequest[]
+  extraordinaryDispatches ExtraordinaryDispatch[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
@@ -206,6 +209,7 @@ model Dependency {
   active          Boolean         @default(true)
   subdependencies Subdependency[]
   users           User[]
+  extraordinaryDispatches ExtraordinaryDispatch[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
@@ -223,6 +227,7 @@ model Subdependency {
 
   users  User[]
   diners Diner[]
+  targetRequests DinerRequest[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
@@ -239,6 +244,7 @@ model Squad {
 
   diners Diner[]
 
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
@@ -251,6 +257,7 @@ model Position {
   active Boolean @default(true)
 
   diners Diner[]
+
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
@@ -315,6 +322,9 @@ model DinerRequest {
   diningRoomId Int?        @map("dining_room_id")
   diningRoom   DiningRoom? @relation(fields: [diningRoomId], references: [id], onDelete: SetNull)
 
+  targetSubdependencyId Int?           @map("target_subdependency_id")
+  targetSubdependency   Subdependency? @relation(fields: [targetSubdependencyId], references: [id], onDelete: SetNull)
+
   details DinerRequestDetail[]
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -342,6 +352,9 @@ model DinerRequestDetail {
   quantity   Int    @default(1)
 
   dispatchedAt DateTime? @map("dispatched_at")
+  dispatchedById Int?      @map("dispatched_by_id")
+  isEmergency    Boolean   @default(false) @map("is_emergency")
+  receiverCedula String?   @map("receiver_cedula")
 
   @@unique([requestId, dinerId])
   @@index([requestId])
@@ -362,4 +375,30 @@ model BiometricRecord {
 
   @@index([dinerId])
   @@map("biometric_records")
+}
+
+model ExtraordinaryDispatch {
+  id             Int        @id @default(autoincrement())
+  date           DateTime   @db.Date
+  shiftType      String     @map("shift_type") // DESAYUNO, ALMUERZO, CENA, SOBRECENA
+  
+  diningRoomId   Int        @map("dining_room_id")
+  diningRoom     DiningRoom @relation(fields: [diningRoomId], references: [id])
+  
+  companyName    String     @map("company_name")
+  personId       String     @map("person_id")
+  quantity       Int        @default(1)
+  
+  dependencyId   Int?       @map("dependency_id")
+  dependency     Dependency? @relation(fields: [dependencyId], references: [id])
+  
+  observation    String?    @db.Text
+  modality       String     @default("DINE_IN")
+  deletedAt      DateTime?  @map("deleted_at")
+  
+  dispatchedAt   DateTime   @default(now()) @map("dispatched_at")
+  dispatchedById Int        @map("dispatched_by_id")
+  dispatcher     User       @relation(fields: [dispatchedById], references: [id])
+  
+  @@map("extraordinary_dispatches")
 }
