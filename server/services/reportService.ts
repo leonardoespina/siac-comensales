@@ -46,6 +46,7 @@ export async function generateMasterReport(filters: any, user: any) {
       comedor: d.request.diningRoom?.name || 'N/A',
       servicio: d.request.shiftType,
       modalidad: d.modality === 'TAKE_AWAY' ? 'PARA LLEVAR' : 'BANDEJA',
+      rationType: d.rationType,
       estatus: d.dispatchedAt ? 'DESPACHADO' : d.request.status,
       fechaDespacho: d.dispatchedAt ? d.dispatchedAt.toISOString() : null,
       quantity: d.quantity

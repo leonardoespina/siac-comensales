@@ -79,6 +79,7 @@ const summaryCounts = computed(() => {
     almuerzo: 0,
     cena: 0,
     sobrecena: 0,
+    dieta: 0,
     total: 0
   }
   for (const row of filteredRows.value) {
@@ -87,6 +88,7 @@ const summaryCounts = computed(() => {
     else if (row.servicio === 'ALMUERZO') counts.almuerzo += qty
     else if (row.servicio === 'CENA') counts.cena += qty
     else if (row.servicio === 'SOBRECENA') counts.sobrecena += qty
+    if (row.rationType === 'DIETA') counts.dieta += qty
     counts.total += qty
   }
   return counts
@@ -234,6 +236,14 @@ onMounted(() => {
           <q-card-section class="q-pa-sm text-center">
             <div class="text-caption text-weight-bold text-grey-8">Sobrecena</div>
             <div class="text-h6 text-weight-bold text-dark">{{ summaryCounts.sobrecena }}</div>
+          </q-card-section>
+        </q-card>
+      </div>
+      <div class="col-12 col-sm-2">
+        <q-card class="bg-orange-3 shadow-2">
+          <q-card-section class="q-pa-sm text-center">
+            <div class="text-caption text-weight-bold text-grey-8">Total Dieta</div>
+            <div class="text-h6 text-weight-bold text-dark">{{ summaryCounts.dieta }}</div>
           </q-card-section>
         </q-card>
       </div>
