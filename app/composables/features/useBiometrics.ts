@@ -9,6 +9,9 @@ export function useBiometrics() {
   const isCapturing = ref(false)
   const isVerifying = ref(false)
   
+  // Permite que el orquestador (useDispatchManagement) sepa por qué falló la lectura
+  const lastBiometricError = ref<'NO_MATCH' | 'HARDWARE_ERROR' | 'CANCELLED' | null>(null)
+  
   let statusInterval: any = null
   let abortController: AbortController | null = null
   const capturedImage = ref<string | null>(null)

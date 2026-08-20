@@ -19,10 +19,10 @@ export default defineApiHandler(async (event) => {
   const diningRoomId = body.diningRoomId
 
   if (!cedula) {
-    throw new DomainError('Debe proporcionar la cédula del comensal', 400, 'MISSING_CEDULA')
+    throw new DomainError('Debe proporcionar la cédula del comensal', 'MISSING_CEDULA', 400)
   }
   if (!diningRoomId) {
-    throw new DomainError('Debe proporcionar el ID del comedor donde se realiza el despacho', 400, 'MISSING_DINING_ROOM')
+    throw new DomainError('Debe proporcionar el ID del comedor donde se realiza el despacho', 'MISSING_DINING_ROOM', 400)
   }
 
   // 1. Obtener la hora actual de Venezuela
@@ -39,7 +39,7 @@ export default defineApiHandler(async (event) => {
   })
 
   if (!diner) {
-    throw new DomainError('Comensal no encontrado', 404, 'DINER_NOT_FOUND')
+    throw new DomainError('Comensal no encontrado', 'DINER_NOT_FOUND', 404)
   }
 
   // 3. Buscar TODAS las solicitudes APROBADAS del comensal para HOY
@@ -65,7 +65,7 @@ export default defineApiHandler(async (event) => {
   })
 
   if (requestDetails.length === 0) {
-    throw new DomainError('El comensal no tiene ninguna solicitud aprobada para hoy.', 403, 'NO_APPROVED_REQUEST')
+    throw new DomainError('El comensal no tiene ninguna solicitud aprobada para hoy.', 'NO_APPROVED_REQUEST', 403)
   }
 
   // 4. Validar que alguna de esas solicitudes pertenezca al comedor donde está el lector
@@ -74,7 +74,7 @@ export default defineApiHandler(async (event) => {
   if (validRoomRequests.length === 0) {
     // Tiene comida, pero en otra sede
     const wrongRoom = requestDetails[0].request.diningRoom.name
-    throw new DomainError(`Tiene comida asignada, pero en el comedor: ${wrongRoom}. Diríjase a esa ubicación.`, 403, 'WRONG_DINING_ROOM')
+    throw new DomainError(`Tiene comida asignada, pero en el comedor: ${wrongRoom}. Diríjase a esa ubicación.`, 'WRONG_DINING_ROOM', 403)
   }
 
   // 5. Cargar los horarios de la base de datos
@@ -124,16 +124,16 @@ export default defineApiHandler(async (event) => {
   if (!matchedDetail) {
     const trimmedMessage = upcomingShiftMessage.trim()
     if (trimmedMessage === '') {
-      throw new DomainError('Estás fuera de horario. Ya no tienes más turnos disponibles para el resto del día.', 403, 'OUT_OF_SCHEDULE')
+      throw new DomainError('Estás fuera de horario. Ya no tienes más turnos disponibles para el resto del día.', 'OUT_OF_SCHEDULE', 403)
     } else {
-      throw new DomainError(`Estás fuera de horario. Tu próximo turno es: ${trimmedMessage}`, 403, 'OUT_OF_SCHEDULE')
+      throw new DomainError(`Estás fuera de horario. Tu próximo turno es: ${trimmedMessage}`, 'OUT_OF_SCHEDULE', 403)
     }
   }
 
   // 7. Verificar si ese turno específico ya fue despachado
   if (matchedDetail.dispatchedAt) {
     const dispatchedTime = dayjs(matchedDetail.dispatchedAt).tz('America/Caracas').format('hh:mm A')
-    throw new DomainError(`ALERTA: El comensal ya retiró su ${matchedShiftSchedule.shiftType} a las ${dispatchedTime}.`, 409, 'ALREADY_DISPATCHED')
+    throw new DomainError(`ALERTA: El comensal ya retiró su ${matchedShiftSchedule.shiftType} a las ${dispatchedTime}.`, 'ALREADY_DISPATCHED', 409)
   }
 
   // 8. Despachar (Actualizar dispatchedAt)

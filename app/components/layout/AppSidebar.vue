@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
 
 const auth = useAuthStore()
@@ -37,7 +37,7 @@ const auth = useAuthStore()
         
         <q-item clickable v-ripple to="/diners/dispatch" active-class="bg-blue-1 text-primary" v-if="auth.hasPermission('DINERS_REQUESTS', 'canRead')">
           <q-item-section avatar><q-icon name="meeting_room" size="sm" /></q-item-section>
-          <q-item-section>Despacho Kiosco</q-item-section>
+          <q-item-section>Despacho</q-item-section>
         </q-item>
 
         <q-item clickable v-ripple to="/extraordinary" active-class="bg-orange-1 text-orange-9" v-if="auth.hasPermission('EXTRAORDINARY', 'canRead')">

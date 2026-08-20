@@ -1,7 +1,8 @@
-import { ref, readonly, onMounted, watch } from 'vue'
+﻿import { ref, readonly, onMounted, watch } from 'vue'
 import { useQuasar } from 'quasar'
 import { useDinersStore } from '~/stores/diners'
 import { useBiometrics } from '~/composables/features/useBiometrics'
+import { useAudioAlerts } from '~/composables/core/useAudioAlerts'
 
 export function useDispatchManagement() {
   const $q = useQuasar()
@@ -16,6 +17,8 @@ export function useDispatchManagement() {
     cancelOperation,
     capturedImage
   } = useBiometrics()
+
+  const { playAlert } = useAudioAlerts()
 
   const searchCedula = ref('')
   const isSearching = ref(false)
@@ -111,10 +114,26 @@ export function useDispatchManagement() {
     // Esperar a que el lector detecte una huella
     const matchedIndex = await verifyFingerprint(candidateTemplates.value)
     
-    // Si la lectura fue cancelada o falló, reintentar automáticamente
+    // Si la lectura falló o no coincidió, evaluar si hubo intento real del usuario
     if (matchedIndex === null || matchedIndex < 0) {
       if (isKioskActive.value) {
-        setTimeout(runScannerCycle, 1500)
+        // capturedImage tiene valor solo si el lector capturó físicamente un dedo
+        // Si no hay imagen, fue un fallo técnico silencioso (sin dedo, sensor ocupado) → reintentar callado
+        if (capturedImage.value) {
+          // Alguien puso el dedo pero no fue reconocido → feedback visual + audio
+          playAlert('FINGERPRINT_NO_MATCH')
+          overlayStatus.value = 'error'
+          overlayTitle.value = 'Huella no reconocida'
+          overlayMessage.value = 'No se pudo identificar su huella. Por favor, intente de nuevo.'
+
+          setTimeout(() => {
+            overlayStatus.value = 'idle'
+            runScannerCycle()
+          }, 2500)
+        } else {
+          // Fallo técnico silencioso (sin dedo aún) → reintentar sin molestar al usuario
+          setTimeout(runScannerCycle, 1500)
+        }
       }
       return
     }
@@ -154,11 +173,19 @@ export function useDispatchManagement() {
       overlayTitle.value = '¡Buen Provecho!'
       overlayMessage.value = `${response.diner.name} tiene autorizado su ${response.dispatch.shift}.`
       
+      playAlert('SUCCESS')
     } catch (error: any) {
       const isAlreadyDispatched = error.response?.status === 409
       overlayStatus.value = 'error'
       overlayTitle.value = isAlreadyDispatched ? 'Alerta de Duplicidad' : 'Acceso Denegado'
       overlayMessage.value = error.data?.message || 'No se pudo procesar el despacho.'
+      
+      console.log('[dispatchFood] Error object:', error)
+      console.log('[dispatchFood] error.data:', error.data)
+      
+      const errorCode = error.data?.data?.code || error.data?.code || 'GENERIC_ERROR'
+      console.log('[dispatchFood] Extracted code:', errorCode)
+      playAlert(errorCode)
     } finally {
       isSearching.value = false
       
