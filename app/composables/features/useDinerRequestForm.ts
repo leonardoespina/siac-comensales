@@ -39,7 +39,7 @@ export function useDinerRequestForm() {
     dependencyId: authStore.user?.dependencyId || null as number | null,
     subdependencyId: authStore.user?.subdependencyId || null as number | null,
     squadId: null as number | null,
-    date: dayjs().format('YYYY-MM-DD'),
+    date: dayjs().add(1, 'day').format('YYYY-MM-DD'),
     diningRoomId: null as number | null,
     observations: ''
   })
@@ -70,11 +70,10 @@ export function useDinerRequestForm() {
 
   const allowedDates = (dateStr: string) => {
     const isBypass = authStore.user?.role?.permissions?.some(p => 
-      (p.module.code === 'DINING_ROOMS' && p.canUpdate) || 
-      (p.module.code === 'GLOBAL_ACCESS' && p.canUpdate)
+      p.module.code === 'GLOBAL_ACCESS' && (p.canUpdate || p.canRead)
     )
 
-    // Si el usuario tiene permisos de bypass, permitimos cualquier fecha (true)
+    // Si el usuario tiene permisos de bypass global (ADMIN), permitimos cualquier fecha (true)
     if (isBypass) return true
     
     // Por petición explícita, SOLO se permite seleccionar EXACTAMENTE el día de mañana (1 día de anticipación)
@@ -97,8 +96,7 @@ export function useDinerRequestForm() {
 
     if (!isBypass && authStore.user?.role?.permissions) {
       isBypass = authStore.user.role.permissions.some(p => 
-        (p.module.code === 'DINING_ROOMS' && p.canUpdate) || 
-        (p.module.code === 'GLOBAL_ACCESS')
+        p.module.code === 'GLOBAL_ACCESS' && (p.canUpdate || p.canRead)
       )
     }
 
