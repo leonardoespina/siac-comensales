@@ -1,14 +1,16 @@
 import { defineApiHandler } from '../../utils/handler'
 import * as repo from '../../repository/diningRoomRepository'
-import { requirePermission } from '../../utils/auth'
+import { requireAnyPermission } from '../../utils/auth'
 import { logAudit } from '../../utils/audit'
+import { DomainError } from '../../domain/errors'
 
 export default defineApiHandler(async (event) => {
-  const userId = await requirePermission(event, 'DINERS', 'create')
+  const user = await requireAnyPermission(event, ['DINING_ROOMS', 'DINERS'], 'create')
+  const userId = user.userId
   
   const body = await readBody(event)
-  if (!body.name || !body.siteId) {
-    throw createError({ statusCode: 400, message: 'El nombre del comedor y la sede son requeridos' })
+  if (!body.name || body.siteId === undefined || body.siteId === null) {
+    throw new DomainError('El nombre del comedor y la sede son requeridos', 'VALIDATION_ERROR', 400)
   }
 
   const created = await repo.createDiningRoom(body.name, Number(body.siteId))

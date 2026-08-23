@@ -34,7 +34,7 @@ export function useDiningRoomForm() {
     form.value = { 
       id: row.id,
       name: row.name,
-      siteId: row.siteId,
+      siteId: row.siteId ?? row.site?.id ?? null,
       active: row.active 
     }
     isEditing.value = true

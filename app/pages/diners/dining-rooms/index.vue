@@ -51,7 +51,7 @@
         outlined
         dense
         class="q-mt-md"
-        :rules="[val => !!val || 'La Sede es requerida']"
+        :rules="[val => (val !== null && val !== undefined && val !== '') || 'La Sede es requerida']"
       />
 
       <q-toggle

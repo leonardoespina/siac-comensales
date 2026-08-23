@@ -16,7 +16,8 @@ export async function createDiningRoom(name: string, siteId: number) {
     data: {
       name: name.toUpperCase().trim(),
       siteId
-    }
+    },
+    include: { site: true }
   })
 }
 
@@ -27,7 +28,8 @@ export async function updateDiningRoom(id: number, name: string, siteId: number,
       name: name.toUpperCase().trim(),
       siteId,
       ...(active !== undefined && { active })
-    }
+    },
+    include: { site: true }
   })
 }
 
