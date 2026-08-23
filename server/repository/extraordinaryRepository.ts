@@ -11,13 +11,19 @@ export async function createExtraordinaryDispatch(data: any) {
       personId: data.personId,
       quantity: data.quantity,
       dependencyId: data.dependencyId || null,
+      subdependencyId: data.subdependencyId || null,
       observation: data.observation || null,
       modality: data.modality || 'DINE_IN',
-      dispatchedById: data.dispatchedById
+      dispatchedById: data.dispatchedById,
+      status: 'PENDING'
     },
     include: {
       diningRoom: true,
       dependency: true,
+      subdependency: true,
+      approver: {
+        select: { id: true, name: true }
+      },
       dispatcher: {
         select: { id: true, name: true, role: true }
       }
@@ -46,12 +52,84 @@ export async function getExtraordinaryDispatches(dateStr: string, diningRoomId?:
     include: {
       diningRoom: true,
       dependency: true,
+      subdependency: true,
+      approver: {
+        select: { id: true, name: true }
+      },
       dispatcher: {
         select: { id: true, name: true, role: true }
       }
     },
     orderBy: {
       dispatchedAt: 'desc'
+    }
+  })
+}
+
+export async function updateExtraordinaryDispatch(id: number, data: any) {
+  const updateData: any = {
+    personId: data.personId,
+    companyName: data.companyName,
+    modality: data.modality || 'DINE_IN',
+    diningRoomId: data.diningRoomId,
+    dependencyId: data.dependencyId || null,
+    subdependencyId: data.subdependencyId || null,
+    observation: data.observation || null,
+    status: 'PENDING'
+  }
+
+  if (data.date) {
+    updateData.date = new Date(`${data.date}T12:00:00.000Z`)
+  }
+
+  if (data.shifts && data.shifts.length > 0) {
+    const targetShift = data.originalShiftType 
+      ? data.shifts.find((s: any) => s.shiftType === data.originalShiftType) || data.shifts[0]
+      : data.shifts[0];
+
+    updateData.quantity = targetShift.quantity
+    if (targetShift.shiftType) {
+      updateData.shiftType = targetShift.shiftType
+    }
+  } else if (data.quantity !== undefined) {
+    updateData.quantity = data.quantity
+  }
+
+  return await prisma.extraordinaryDispatch.update({
+    where: { id },
+    data: updateData,
+    include: {
+      diningRoom: true,
+      dependency: true,
+      subdependency: true,
+      approver: {
+        select: { id: true, name: true }
+      },
+      dispatcher: {
+        select: { id: true, name: true, role: true }
+      }
+    }
+  })
+}
+
+export async function updateExtraordinaryStatus(id: number, status: string, approvedById?: number) {
+  return await prisma.extraordinaryDispatch.update({
+    where: { id },
+    data: {
+      status,
+      approvedById: approvedById || null,
+      approvedAt: approvedById ? new Date() : null
+    },
+    include: {
+      diningRoom: true,
+      dependency: true,
+      subdependency: true,
+      approver: {
+        select: { id: true, name: true }
+      },
+      dispatcher: {
+        select: { id: true, name: true, role: true }
+      }
     }
   })
 }
@@ -71,30 +149,6 @@ export async function findRecentVisitorByNameOrId(query: string) {
     select: {
       personId: true,
       companyName: true
-    }
-  })
-}
-
-export async function updateExtraordinaryDispatch(id: number, data: any) {
-  return await prisma.extraordinaryDispatch.update({
-    where: { id },
-    data: {
-      date: data.date ? new Date(`${data.date}T12:00:00.000Z`) : undefined,
-      shiftType: data.shiftType,
-      diningRoomId: data.diningRoomId,
-      companyName: data.companyName,
-      personId: data.personId,
-      quantity: data.quantity,
-      dependencyId: data.dependencyId || null,
-      observation: data.observation || null,
-      modality: data.modality
-    },
-    include: {
-      diningRoom: true,
-      dependency: true,
-      dispatcher: {
-        select: { id: true, name: true, role: true }
-      }
     }
   })
 }

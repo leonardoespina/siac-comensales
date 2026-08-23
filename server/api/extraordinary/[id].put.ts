@@ -1,13 +1,17 @@
 import { defineApiHandler } from '../../utils/handler'
-import { requireUserContext } from '../../utils/auth'
+import { requirePermission } from '../../utils/auth'
 import * as extraordinaryService from '../../services/extraordinaryService'
+import { getRouterParam } from 'h3'
 
 export default defineApiHandler(async (event) => {
-  const id = Number(event.context.params?.id)
-  const body = await readBody(event)
-  const user = await requireUserContext(event)
+  const userId = await requirePermission(event, 'EXTRAORDINARY', 'update')
 
-  const updatedRecord = await extraordinaryService.updateExtraordinaryDispatch(id, body, user.id)
+  const paramId = getRouterParam(event, 'id')
+  const id = parseInt(paramId || '0', 10)
+  if (!id) throw new Error('ID inválido')
+
+  const body = await readBody(event)
+  const updatedRecord = await extraordinaryService.updateExtraordinaryDispatch(id, body, userId)
 
   return {
     success: true,

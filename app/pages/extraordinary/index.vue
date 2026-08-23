@@ -9,11 +9,18 @@
     <q-card class="q-mb-md">
       <q-card-section class="row q-col-gutter-md items-center">
         <div class="col-12 col-md-4">
-          <q-input v-model="controller.searchDate.value" type="date" label="Fecha" outlined />
+          <q-input 
+            :model-value="controller.searchDate.value" 
+            @update:model-value="controller.setSearchDate"
+            type="date" 
+            label="Fecha" 
+            outlined 
+          />
         </div>
         <div class="col-12 col-md-4">
           <q-select 
-            v-model="controller.searchDiningRoom.value" 
+            :model-value="controller.searchDiningRoom.value" 
+            @update:model-value="controller.setSearchDiningRoom"
             :options="controller.diningRoomsOptions.value" 
             label="Comedor (Opcional)" 
             outlined 
@@ -44,6 +51,13 @@
             </q-badge>
           </q-td>
         </template>
+        <template v-slot:body-cell-status="props">
+          <q-td :props="props">
+            <q-badge :color="props.row.status === 'APPROVED' ? 'positive' : props.row.status === 'REJECTED' ? 'negative' : 'warning'">
+              {{ props.row.status === 'APPROVED' ? 'Aprobado' : props.row.status === 'REJECTED' ? 'Rechazado' : 'Pendiente' }}
+            </q-badge>
+          </q-td>
+        </template>
         <template v-slot:body-cell-dispatcher="props">
           <q-td :props="props">
             {{ props.row.dispatcher?.name || 'Sistema' }}
@@ -56,6 +70,14 @@
         </template>
         <template v-slot:body-cell-actions="props">
           <q-td :props="props" class="text-right">
+            <template v-if="props.row.status === 'PENDING'">
+              <q-btn flat round dense color="positive" icon="check" @click="controller.approveDispatch(props.row.id)">
+                <q-tooltip>Aprobar</q-tooltip>
+              </q-btn>
+              <q-btn flat round dense color="negative" icon="close" @click="controller.rejectDispatch(props.row.id)">
+                <q-tooltip>Rechazar</q-tooltip>
+              </q-btn>
+            </template>
             <q-btn flat round dense color="primary" icon="edit" @click="controller.openEditForm(props.row)">
               <q-tooltip>Editar</q-tooltip>
             </q-btn>
@@ -69,10 +91,12 @@
 
     <!-- Modal de Formulario -->
     <ExtraordinaryFormModal 
-      v-model="controller.isModalOpen.value"
+      :model-value="controller.isModalOpen.value"
+      @update:model-value="controller.setModalOpen"
       :form="controller.formData.value"
       :dining-rooms-options="controller.diningRoomsOptions.value"
       :dependencies-options="controller.dependenciesOptions.value"
+      :get-subdependencies="controller.getSubdependencies"
       :is-submitting="controller.isSubmitting.value"
       @submit="controller.submitForm"
     />
@@ -91,11 +115,13 @@ const columns = [
   { name: 'personId', label: 'Cédula/RIF', field: 'personId', align: 'left' as const },
   { name: 'companyName', label: 'Nombre/Empresa', field: 'companyName', align: 'left' as const },
   { name: 'dependency', label: 'Dependencia a Visitar', field: (row: any) => row.dependency?.name || 'N/A', align: 'left' as const },
+  { name: 'subdependency', label: 'Subdependencia', field: (row: any) => row.subdependency?.name || 'N/A', align: 'left' as const },
   { name: 'shiftType', label: 'Servicio', field: 'shiftType', align: 'center' as const },
   { name: 'quantity', label: 'Cant.', field: 'quantity', align: 'center' as const },
   { name: 'modality', label: 'Modalidad', field: 'modality', align: 'center' as const },
   { name: 'diningRoom', label: 'Comedor', field: (row: any) => row.diningRoom?.name || 'N/A', align: 'left' as const },
   { name: 'dispatcher', label: 'Registrado Por', field: 'dispatcher', align: 'left' as const },
+  { name: 'status', label: 'Estado', field: 'status', align: 'center' as const },
   { name: 'actions', label: 'Acciones', field: 'actions', align: 'right' as const }
 ]
 

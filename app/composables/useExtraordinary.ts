@@ -42,15 +42,29 @@ export function useExtraordinary() {
     })
   }
 
+  const getSubdependencies = (depId: number) => {
+    const dep = dependenciesStore.dependencies.find((d: any) => d.id === depId)
+    if (!dep || !dep.subdependencies) return []
+    return dep.subdependencies
+      .filter((s: any) => s.active !== false)
+      .map((s: any) => ({ label: s.name, value: s.id }))
+  }
+
   const openForm = () => {
     formData.value = {
       id: null,
+      date: searchDate.value || new Date().toISOString().split('T')[0],
       personId: '',
       companyName: '',
-      shiftType: 'ALMUERZO',
-      quantity: 1,
+      shifts: [
+        { shiftType: 'DESAYUNO', quantity: 0 },
+        { shiftType: 'ALMUERZO', quantity: 1 },
+        { shiftType: 'CENA', quantity: 0 },
+        { shiftType: 'SOBRECENA', quantity: 0 }
+      ],
       modality: 'DINE_IN',
       dependencyId: null,
+      subdependencyId: null,
       diningRoomId: searchDiningRoom.value || null,
       observation: ''
     }
@@ -58,14 +72,23 @@ export function useExtraordinary() {
   }
 
   const openEditForm = (row: any) => {
+    const shiftsList = [
+      { shiftType: 'DESAYUNO', quantity: row.shiftType === 'DESAYUNO' ? row.quantity : 0 },
+      { shiftType: 'ALMUERZO', quantity: row.shiftType === 'ALMUERZO' ? row.quantity : 0 },
+      { shiftType: 'CENA', quantity: row.shiftType === 'CENA' ? row.quantity : 0 },
+      { shiftType: 'SOBRECENA', quantity: row.shiftType === 'SOBRECENA' ? row.quantity : 0 }
+    ]
+
     formData.value = {
       id: row.id,
+      originalShiftType: row.shiftType,
+      date: new Date(row.date).toISOString().split('T')[0],
       personId: row.personId,
       companyName: row.companyName,
-      shiftType: row.shiftType,
-      quantity: row.quantity,
+      shifts: shiftsList,
       modality: row.modality,
-      dependencyId: row.dependencyId,
+      dependencyId: row.dependencyId || null,
+      subdependencyId: row.subdependencyId || null,
       diningRoomId: row.diningRoomId,
       observation: row.observation || ''
     }
@@ -88,6 +111,33 @@ export function useExtraordinary() {
     })
   }
 
+  const approveDispatch = async (id: number) => {
+    try {
+      await store.approveDispatch(id)
+      $q.notify({ type: 'positive', message: 'Visita aprobada exitosamente.' })
+    } catch (error: any) {
+      const msg = error?.data?.message || error?.statusMessage || 'Error al aprobar visita.'
+      $q.notify({ type: 'negative', message: msg })
+    }
+  }
+
+  const rejectDispatch = async (id: number) => {
+    $q.dialog({
+      title: 'Rechazar Visita',
+      message: '¿Está seguro que desea rechazar esta visita?',
+      cancel: true,
+      persistent: true
+    }).onOk(async () => {
+      try {
+        await store.rejectDispatch(id)
+        $q.notify({ type: 'positive', message: 'Visita rechazada correctamente.' })
+      } catch (error: any) {
+        const msg = error?.data?.message || error?.statusMessage || 'Error al rechazar visita.'
+        $q.notify({ type: 'negative', message: msg })
+      }
+    })
+  }
+
   const submitForm = async (payload: any) => {
     isSubmitting.value = true
     try {
@@ -95,14 +145,15 @@ export function useExtraordinary() {
         // UPDATE
         await store.updateDispatch(payload.id, {
           ...payload,
-          date: searchDate.value
+          date: payload.date || searchDate.value
         })
         $q.notify({ type: 'positive', message: 'Visita actualizada exitosamente.' })
       } else {
         // CREATE
         await store.registerDispatch({
           ...payload,
-          date: searchDate.value
+          // Remove specific shift attributes at root level just in case, payload.shifts handles it
+          date: payload.date || searchDate.value
         })
         $q.notify({ type: 'positive', message: 'Visita registrada exitosamente.' })
       }
@@ -149,6 +200,9 @@ export function useExtraordinary() {
     submitForm,
     setModalOpen,
     setSearchDate,
-    setSearchDiningRoom
+    setSearchDiningRoom,
+    getSubdependencies,
+    approveDispatch,
+    rejectDispatch
   }
 }

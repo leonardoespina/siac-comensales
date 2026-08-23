@@ -13,6 +13,17 @@
             
             <div class="col-12 col-sm-4">
               <q-input 
+                v-model="localForm.date" 
+                type="date"
+                label="Fecha de la Visita *" 
+                outlined 
+                dense
+                lazy-rules
+                :rules="[val => !!val || 'Requerido']"
+              />
+            </div>
+            <div class="col-12 col-sm-4">
+              <q-input 
                 v-model="localForm.personId" 
                 label="Cédula / RIF *" 
                 outlined 
@@ -25,7 +36,7 @@
               />
             </div>
             
-            <div class="col-12 col-sm-8">
+            <div class="col-12 col-sm-4">
               <q-input 
                 v-model="localForm.companyName" 
                 label="Nombre / Empresa *" 
@@ -36,7 +47,7 @@
               />
             </div>
 
-            <div class="col-12 col-sm-6">
+            <div class="col-12 col-sm-4">
               <q-select 
                 v-model="localForm.diningRoomId" 
                 :options="diningRoomsOptions" 
@@ -50,7 +61,7 @@
               />
             </div>
 
-            <div class="col-12 col-sm-6">
+            <div class="col-12 col-sm-4">
               <q-select 
                 v-model="localForm.dependencyId" 
                 :options="dependenciesOptions" 
@@ -60,31 +71,41 @@
                 clearable
                 emit-value
                 map-options
+                @update:model-value="localForm.subdependencyId = null"
               />
             </div>
 
             <div class="col-12 col-sm-4">
               <q-select 
-                v-model="localForm.shiftType" 
-                :options="['DESAYUNO', 'ALMUERZO', 'CENA', 'SOBRECENA']" 
-                label="Tipo de Servicio *" 
+                v-model="localForm.subdependencyId" 
+                :options="subdependenciesOptions" 
+                label="Subdependencia" 
                 outlined 
                 dense
+                clearable
+                emit-value
+                map-options
+                :disable="!localForm.dependencyId"
               />
             </div>
 
-            <div class="col-12 col-sm-4">
-              <q-input 
-                v-model.number="localForm.quantity" 
-                type="number" 
-                label="Cant." 
-                outlined 
-                dense
-                min="1"
-              />
+            <div class="col-12">
+              <div class="text-subtitle2 q-mb-sm text-primary">Turnos Solicitados</div>
+              <div class="row q-col-gutter-sm">
+                <div class="col-12 col-sm-3" v-for="(shift, index) in localForm.shifts" :key="index">
+                  <q-input 
+                    v-model.number="shift.quantity" 
+                    type="number" 
+                    :label="shift.shiftType" 
+                    outlined 
+                    dense
+                    min="0"
+                  />
+                </div>
+              </div>
             </div>
 
-            <div class="col-12 col-sm-4">
+            <div class="col-12 col-sm-12">
               <q-select 
                 v-model="localForm.modality" 
                 :options="[{label: 'Bandeja', value: 'DINE_IN'}, {label: 'Llevar', value: 'TAKE_AWAY'}]" 
@@ -120,7 +141,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useQuasar } from 'quasar'
 import { useExtraordinaryStore } from '~/stores/extraordinary'
 
@@ -129,6 +150,7 @@ const props = defineProps<{
   form: any
   diningRoomsOptions: any[]
   dependenciesOptions: any[]
+  getSubdependencies: (depId: number) => any[]
   isSubmitting: boolean
 }>()
 
@@ -138,6 +160,11 @@ const store = useExtraordinaryStore()
 const $q = useQuasar()
 
 const localForm = ref<any>({})
+
+const subdependenciesOptions = computed(() => {
+  if (!localForm.value.dependencyId) return []
+  return props.getSubdependencies(localForm.value.dependencyId)
+})
 
 watch(() => props.modelValue, (isOpen) => {
   if (isOpen && props.form) {
@@ -168,6 +195,13 @@ const onSubmit = () => {
     $q.notify({ type: 'warning', message: 'Debe seleccionar el Comedor.' })
     return
   }
+
+  const hasAtLeastOne = localForm.value.shifts?.some((s: any) => Number(s.quantity) > 0)
+  if (!hasAtLeastOne) {
+    $q.notify({ type: 'warning', message: 'Debe indicar la cantidad (mayor a 0) en al menos un turno (Desayuno, Almuerzo, Cena o Sobrecena).' })
+    return
+  }
+
   emit('submit', localForm.value)
 }
 </script>

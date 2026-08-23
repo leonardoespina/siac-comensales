@@ -25,10 +25,46 @@ export const useExtraordinaryStore = defineStore('extraordinary', () => {
         body: payload
       })
       // Prepend to history if the date matches
-      dispatches.value.unshift(response.data)
+      if (Array.isArray(response.data)) {
+        dispatches.value.unshift(...response.data)
+      } else {
+        dispatches.value.unshift(response.data)
+      }
       return response
     } catch (error) {
       console.error('Error registering extraordinary dispatch:', error)
+      throw error
+    }
+  }
+
+  const approveDispatch = async (id: number) => {
+    try {
+      const response = await $fetch<any>(`/api/extraordinary/${id}/approve`, {
+        method: 'PUT'
+      })
+      const index = dispatches.value.findIndex(d => d.id === id)
+      if (index !== -1) {
+        dispatches.value[index] = { ...dispatches.value[index], ...response.data }
+      }
+      return response
+    } catch (error) {
+      console.error('Error approving extraordinary dispatch:', error)
+      throw error
+    }
+  }
+
+  const rejectDispatch = async (id: number) => {
+    try {
+      const response = await $fetch<any>(`/api/extraordinary/${id}/reject`, {
+        method: 'PUT'
+      })
+      const index = dispatches.value.findIndex(d => d.id === id)
+      if (index !== -1) {
+        dispatches.value[index] = { ...dispatches.value[index], ...response.data }
+      }
+      return response
+    } catch (error) {
+      console.error('Error rejecting extraordinary dispatch:', error)
       throw error
     }
   }
@@ -80,6 +116,8 @@ export const useExtraordinaryStore = defineStore('extraordinary', () => {
     registerDispatch,
     updateDispatch,
     deleteDispatch,
+    approveDispatch,
+    rejectDispatch,
     autocompleteVisitor
   }
 })

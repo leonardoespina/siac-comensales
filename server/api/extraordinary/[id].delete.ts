@@ -1,12 +1,16 @@
 import { defineApiHandler } from '../../utils/handler'
-import { requireUserContext } from '../../utils/auth'
+import { requirePermission } from '../../utils/auth'
 import * as extraordinaryService from '../../services/extraordinaryService'
+import { getRouterParam } from 'h3'
 
 export default defineApiHandler(async (event) => {
-  const id = Number(event.context.params?.id)
-  const user = await requireUserContext(event)
+  const userId = await requirePermission(event, 'EXTRAORDINARY', 'delete')
 
-  await extraordinaryService.deleteExtraordinaryDispatch(id, user.id)
+  const paramId = getRouterParam(event, 'id')
+  const id = parseInt(paramId || '0', 10)
+  if (!id) throw new Error('ID inválido')
+
+  await extraordinaryService.deleteExtraordinaryDispatch(id, userId)
 
   return {
     success: true,
