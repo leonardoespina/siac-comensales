@@ -55,12 +55,12 @@ export const dinerRequestRepository = {
   },
 
   async findOverlappingDiners(date: Date, shiftType: string, dinerIds: number[]) {
-    // Busca detalles de peticiones existentes para los comensales dados en el día y turno específicos
-    // IGNORA las solicitudes que han sido eliminadas lógicamente (Soft Delete) para liberar al comensal.
+    // Busca detalles de peticiones individuales (DINE_IN) existentes para los comensales dados en el día y turno específicos.
+    // IGNORA las solicitudes que han sido eliminadas lógicamente (Soft Delete) y las autorizaciones masivas (TAKE_AWAY).
     return prisma.dinerRequestDetail.findMany({
       where: {
         dinerId: { in: dinerIds },
-        modality: 'DINE_IN', // Solo choca si ya tienen una comida individual
+        modality: 'DINE_IN',
         request: {
           date: date,
           shiftType: shiftType,

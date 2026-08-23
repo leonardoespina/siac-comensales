@@ -127,6 +127,16 @@
                           />
                         </div>
                       </div>
+                      <q-separator class="q-my-xs" />
+                      <q-checkbox
+                        v-model="form.masterChecks.value['MASIVO_COL']"
+                        label="Masivo (Para Llevar)"
+                        dense
+                        size="sm"
+                        color="orange"
+                        :disable="form.isViewMode.value"
+                        @update:model-value="(val) => form.toggleAll('MASIVO', val)"
+                      />
                     </q-card-section>
                   </q-card>
 
@@ -219,6 +229,18 @@
                       <q-td :props="props" v-if="form.activeShifts.value.includes(props.col.name)">
                         <q-checkbox v-model="form.gridState.value[props.row.id][props.col.name]" dense color="primary" :disable="form.isViewMode.value" />
                       </q-td>
+                      <q-td
+                        :props="props"
+                        v-else-if="props.col.name === 'MASIVO'"
+                        :class="form.gridState.value[props.row.id]?.['MASIVO'] ? 'bg-orange-2' : ''"
+                      >
+                        <q-checkbox
+                          v-model="form.gridState.value[props.row.id]['MASIVO']"
+                          dense
+                          color="orange"
+                          :disable="form.isViewMode.value"
+                        />
+                      </q-td>
                       <q-td :props="props" v-else-if="props.col.name === 'comedor'">
                         <q-select 
                           v-model="form.dinerDiningRooms.value[props.row.id]"
@@ -275,6 +297,17 @@
                                 dense 
                                 size="sm" 
                                 color="primary"
+                                :disable="form.isViewMode.value"
+                              />
+                            </div>
+                            <div class="col-12">
+                              <q-separator class="q-mb-xs q-mt-xs" />
+                              <q-checkbox
+                                v-model="form.gridState.value[props.row.id]['MASIVO']"
+                                label="Masivo (Para Llevar)"
+                                dense
+                                size="sm"
+                                color="orange"
                                 :disable="form.isViewMode.value"
                               />
                             </div>

@@ -132,8 +132,8 @@ export const dinerRequestService = {
       }
 
       // 1.5 Validar Anti-Duplicados (Solapamiento)
-      // Extraemos solo los comensales que van a tener una comida individual (DINE_IN).
-      // Si la modalidad es TAKE_AWAY (masivo), saltamos la validación porque son solo mensajeros
+      // Se valida anti-solapamiento solo para raciones individuales en sitio (DINE_IN).
+      // Las personas autorizadas para retiros masivos (TAKE_AWAY) no se bloquean aunque tengan comida individual.
       const dineInDiners = data.diners.filter(d => d.modality !== 'TAKE_AWAY')
       
       if (dineInDiners.length > 0) {
@@ -141,10 +141,10 @@ export const dinerRequestService = {
         const overlaps = await dinerRequestRepository.findOverlappingDiners(targetDate, data.shiftType, dinerIds)
         
         if (overlaps.length > 0) {
-          const names = overlaps.map(o => o.diner.name).join(', ')
+          const names = Array.from(new Set(overlaps.map(o => o.diner.name))).join(', ')
           throw createError({
             statusCode: 409,
-            statusMessage: `Conflicto: Los siguientes comensales ya tienen su comida individual (o están duplicados) para el ${dateStr} (${data.shiftType}): ${names}`
+            statusMessage: `Conflicto: Los siguientes comensales ya tienen una solicitud individual registrada para el ${dateStr} (${data.shiftType}): ${names}`
           })
         }
       }
@@ -208,20 +208,10 @@ export const dinerRequestService = {
       })
       if (req) requestsToUpdate.push(req)
     } else {
-      console.log(`[updateRequestBatch] Buscando batchCode: ${batchOrId}`)
       requestsToUpdate = await prisma.dinerRequest.findMany({
         where: { batchCode: batchOrId, deletedAt: null },
         include: { details: true }
       })
-      console.log(`[updateRequestBatch] Encontrados activos: ${requestsToUpdate.length}`)
-      
-      if (requestsToUpdate.length === 0) {
-        // Buscar para ver si está borrado
-        const allWithBatch = await prisma.dinerRequest.findMany({
-          where: { batchCode: batchOrId }
-        })
-        console.log(`[updateRequestBatch] Encontrados (incluyendo borrados): ${allWithBatch.length}`)
-      }
     }
 
     if (requestsToUpdate.length === 0) {
@@ -232,8 +222,6 @@ export const dinerRequestService = {
     // Lo verificamos comprobando si la cantidad de comensales y turnos se mantuvo idéntica.
     const existingDinersCount = requestsToUpdate.reduce((acc, req) => acc + req.details.length, 0)
     const incomingDinersCount = data.shifts.reduce((acc, shift) => acc + shift.diners.length, 0)
-    
-    console.log(`[DEBUG] EMERGENCY CHANGE EVAL: existing=${existingDinersCount}, incoming=${incomingDinersCount}`)
     
     // Si la cantidad de personas comerá es la misma, se asume que solo están redireccionando el comedor.
     const isOnlyRoomChange = existingDinersCount === incomingDinersCount

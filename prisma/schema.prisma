@@ -119,6 +119,7 @@ model User {
   createdDinerRequests  DinerRequest[] @relation("DinerRequestsCreated")
   approvedDinerRequests DinerRequest[] @relation("DinerRequestsApproved")
   extraordinaryDispatches ExtraordinaryDispatch[]
+  approvedExtraordinaryDispatches ExtraordinaryDispatch[] @relation("ExtraordinaryApprover")
 
   @@index([roleId])
   @@index([dependencyId])
@@ -228,6 +229,7 @@ model Subdependency {
   users  User[]
   diners Diner[]
   targetRequests DinerRequest[]
+  extraordinaryDispatches ExtraordinaryDispatch[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
@@ -392,8 +394,16 @@ model ExtraordinaryDispatch {
   dependencyId   Int?       @map("dependency_id")
   dependency     Dependency? @relation(fields: [dependencyId], references: [id])
   
+  subdependencyId Int?       @map("subdependency_id")
+  subdependency   Subdependency? @relation(fields: [subdependencyId], references: [id])
+  
   observation    String?    @db.Text
   modality       String     @default("DINE_IN")
+  
+  status         String     @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvedById   Int?       @map("approved_by_id")
+  approver       User?      @relation("ExtraordinaryApprover", fields: [approvedById], references: [id])
+  approvedAt     DateTime?  @map("approved_at")
   deletedAt      DateTime?  @map("deleted_at")
   
   dispatchedAt   DateTime   @default(now()) @map("dispatched_at")

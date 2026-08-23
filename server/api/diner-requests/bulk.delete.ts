@@ -1,8 +1,7 @@
 import { defineApiHandler } from '../../utils/handler'
-import { requirePermission } from '../../utils/auth'
+import { requirePermission, hasGlobalTimeBypass } from '../../utils/auth'
 import { dinerRequestService } from '../../services/dinerRequestService'
 import { createError, readBody } from 'h3'
-import { prisma } from '../../utils/prisma'
 
 export default defineApiHandler(async (event) => {
   const userId = await requirePermission(event, 'DINERS_REQUESTS', 'delete')
@@ -14,14 +13,7 @@ export default defineApiHandler(async (event) => {
     throw new Error('Debe proveer una lista de IDs para eliminar')
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: { role: { include: { permissions: { include: { module: true } } } } }
-  })
-  const hasGlobalBypass = user?.role?.permissions?.some(p => 
-    (p.module.code === 'DINING_ROOMS' && p.can_update) || 
-    (p.module.code === 'GLOBAL_ACCESS' && p.can_update)
-  ) || false
+  const hasGlobalBypass = await hasGlobalTimeBypass(userId)
   
   return dinerRequestService.deleteRequestsBulk(ids, hasGlobalBypass)
 })

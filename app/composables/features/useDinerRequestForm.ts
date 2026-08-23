@@ -136,7 +136,7 @@ export function useDinerRequestForm() {
       { name: 'nombre', label: 'Nombre', align: 'left', field: 'name' },
       { name: 'rationType', label: 'Dieta', align: 'left', field: 'rationType' }
     ]
-    
+
     baseCols.push({ name: 'comedor', label: 'Comedor', align: 'left', field: () => filters.value.diningRoomId ? diningRoomsStore.diningRooms.find(d => d.id === filters.value.diningRoomId)?.name : 'N/A' })
     const shiftCols = activeShifts.value.map(shift => ({
       name: shift,
@@ -144,7 +144,9 @@ export function useDinerRequestForm() {
       align: 'center',
       field: shift
     }))
-    return [...baseCols, ...shiftCols] as any[]
+    // Columna MASIVO: flag individual por comensal (TAKE_AWAY). Se separa en solicitud propia al guardar.
+    const masivoCol = { name: 'MASIVO', label: 'Masivo', align: 'center', field: 'MASIVO', headerStyle: 'color: #E65100; font-weight: 700;' }
+    return [...baseCols, ...shiftCols, masivoCol] as any[]
   })
 
   const filteredSquads = computed(() => {
@@ -245,7 +247,8 @@ export function useDinerRequestForm() {
     for (const shift of activeShifts.value) {
       masterChecks.value[shift] = false
     }
-    masterChecks.value['MASIVO'] = false
+    masterChecks.value['MASIVO']     = false
+    masterChecks.value['MASIVO_COL'] = false
   }
 
   function refreshGrid() {
@@ -307,7 +310,6 @@ export function useDinerRequestForm() {
     bulkQuantities.value = {}
     
     // Limpiar checkboxes globales
-    activeShifts.value = []
     resetMasterChecks()
   }
 
@@ -379,10 +381,14 @@ export function useDinerRequestForm() {
         // Cargar el flag de Masivo
         if (d.modality === 'TAKE_AWAY') {
           gridState.value[dinerId]['MASIVO'] = true
-          masterChecks.value['MASIVO'] = true
           masterChecks.value[shift] = true
-          bulkAuthorizedDinerId.value = dinerId
-          bulkQuantities.value[shift] = d.quantity || 1
+          
+          // Si la cantidad es > 1, definitivamente es un Retiro Mara (Grupos de Seguridad)
+          if (d.quantity > 1) {
+            masterChecks.value['MASIVO'] = true
+            bulkAuthorizedDinerId.value = dinerId
+            bulkQuantities.value[shift] = d.quantity
+          }
         } else if (gridState.value[dinerId]['MASIVO'] === undefined) {
           gridState.value[dinerId]['MASIVO'] = false
         }
@@ -491,7 +497,7 @@ export function useDinerRequestForm() {
           if (!dRoomId) {
             missingDiningRoom = true
           } else {
-            const key = String(dRoomId)
+            const key = `${dRoomId}__TAKE_AWAY`
             groupsByDiningRoom[key] = [{
               id: bulkAuthorizedDinerId.value,
               quantity: bulkQuantities.value[shift] || 1,
@@ -508,12 +514,14 @@ export function useDinerRequestForm() {
               missingDiningRoom = true
               break
             }
-            const key = String(dRoomId)
+            // Clave compuesta: separa comensales DINE_IN y TAKE_AWAY en requests distintas
+            const modality = gridState.value[d.id]?.['MASIVO'] ? 'TAKE_AWAY' : 'DINE_IN'
+            const key = `${dRoomId}__${modality}`
             if (!groupsByDiningRoom[key]) groupsByDiningRoom[key] = []
             groupsByDiningRoom[key].push({
               id: d.id,
               quantity: quantities.value[d.id] || 1,
-              modality: gridState.value[d.id]?.['MASIVO'] ? 'TAKE_AWAY' : 'DINE_IN'
+              modality
             })
           }
         }
@@ -523,8 +531,13 @@ export function useDinerRequestForm() {
           return false
         }
 
-        for (const dRoomIdStr of Object.keys(groupsByDiningRoom)) {
-          const diners = groupsByDiningRoom[dRoomIdStr]
+        for (const key of Object.keys(groupsByDiningRoom)) {
+          const [dRoomIdStr, modality] = key.split('__')
+          const diners = groupsByDiningRoom[key]
+          
+          // Asignar un batchCode diferente para separar visualmente en el historial (2 solicitudes)
+          const finalBatchCode = modality === 'TAKE_AWAY' ? `${batchCode}-M` : `${batchCode}-N`
+
           try {
             await store.createRequests({
               dates: datesArray,
@@ -533,7 +546,7 @@ export function useDinerRequestForm() {
               observations: filters.value.observations || '',
               diningRoomId: parseInt(dRoomIdStr),
               diners: diners,
-              batchCode: batchCode
+              batchCode: finalBatchCode
             })
             successCount++
           } catch (e: any) {
@@ -624,13 +637,31 @@ export function useDinerRequestForm() {
       } else {
         for (const shift of activeShifts.value) {
           const dinersForShift = selectedDiners.filter(d => gridState.value[d.id][shift])
-          if (dinersForShift.length > 0) {
+          if (dinersForShift.length === 0) continue
+
+          // Separar en dos grupos: normales (DINE_IN) y masivos (TAKE_AWAY)
+          // Cada grupo genera un DinerRequest independiente bajo el mismo batchCode
+          const normalDiners = dinersForShift.filter(d => !gridState.value[d.id]['MASIVO'])
+          const masivoDiners = dinersForShift.filter(d =>  gridState.value[d.id]['MASIVO'])
+
+          if (normalDiners.length > 0) {
             shiftsPayload.push({
               shiftType: shift,
-              diners: dinersForShift.map(d => ({
+              diners: normalDiners.map(d => ({
                 id: d.id,
                 quantity: d.quantity || 1,
-                modality: gridState.value[d.id]['MASIVO'] ? 'TAKEOUT' : 'DINE_IN',
+                modality: 'DINE_IN',
+                diningRoomId: dinerDiningRooms.value[d.id] || filters.value.diningRoomId
+              }))
+            })
+          }
+          if (masivoDiners.length > 0) {
+            shiftsPayload.push({
+              shiftType: shift,
+              diners: masivoDiners.map(d => ({
+                id: d.id,
+                quantity: d.quantity || 1,
+                modality: 'TAKE_AWAY',
                 diningRoomId: dinerDiningRooms.value[d.id] || filters.value.diningRoomId
               }))
             })
