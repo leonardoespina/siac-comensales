@@ -3,6 +3,7 @@ import { prisma } from '../utils/prisma'
 export interface MasterReportFilters {
   dateFrom: Date
   dateTo: Date
+  siteId?: number
   diningRoomId?: number
   shiftType?: string
   status?: string
@@ -34,7 +35,10 @@ export async function getConsolidatedReport(filters: MasterReportFilters, securi
   // Filters
   if (filters.diningRoomId) {
     whereClause.request.diningRoomId = filters.diningRoomId
+  } else if (filters.siteId) {
+    whereClause.request.diningRoom = { siteId: filters.siteId }
   }
+
   if (filters.shiftType) {
     whereClause.request.shiftType = filters.shiftType
   }
@@ -105,6 +109,8 @@ export async function getApprovedExtraordinaryForReport(filters: MasterReportFil
 
   if (filters.diningRoomId) {
     whereClause.diningRoomId = filters.diningRoomId
+  } else if (filters.siteId) {
+    whereClause.diningRoom = { siteId: filters.siteId }
   }
 
   if (filters.shiftType) {

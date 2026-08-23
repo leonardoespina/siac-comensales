@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '~/stores/auth'
+import { useSitesStore } from '~/stores/sites'
 import * as xlsx from 'xlsx' // We assume xlsx is installed, or we can use native CSV export
 
 const loading = ref(false)
@@ -10,11 +11,15 @@ const rows = ref<any[]>([])
 const authStore = useAuthStore()
 const user = computed(() => authStore.user)
 
+const sitesStore = useSitesStore()
+const sites = computed(() => sitesStore.sites.filter(s => s.active))
+
 // Filters
 const filters = ref({
   dateFrom: new Date().toISOString().split('T')[0],
   dateTo: new Date().toISOString().split('T')[0],
-  diningRoomId: null,
+  siteId: null as number | null,
+  diningRoomId: null as number | null,
   shiftType: null,
   status: null,
   dependencyId: user?.value?.dependencyId || null,
@@ -27,6 +32,19 @@ const searchQuery = ref('')
 // Dropdowns
 const { data: diningRooms } = useFetch('/api/dining-rooms', {
   transform: (data: any) => data.filter((d: any) => d.active)
+})
+
+const availableDiningRooms = computed(() => {
+  if (!diningRooms.value) return []
+  if (!filters.value.siteId) return diningRooms.value
+  return diningRooms.value.filter((d: any) => d.siteId === filters.value.siteId)
+})
+
+watch(() => filters.value.siteId, () => {
+  if (filters.value.diningRoomId) {
+    const exists = availableDiningRooms.value.some((d: any) => d.id === filters.value.diningRoomId)
+    if (!exists) filters.value.diningRoomId = null
+  }
 })
 
 const shifts = [
@@ -102,6 +120,7 @@ const onSearch = async () => {
       params: {
         dateFrom: `${filters.value.dateFrom}T00:00:00Z`,
         dateTo: `${filters.value.dateTo}T23:59:59Z`,
+        siteId: filters.value.siteId,
         diningRoomId: filters.value.diningRoomId,
         shiftType: filters.value.shiftType,
         status: filters.value.status,
@@ -134,6 +153,7 @@ const onExport = () => {
 
 // Initial load
 onMounted(() => {
+  sitesStore.fetchSites()
   onSearch()
 })
 </script>
@@ -154,16 +174,30 @@ onMounted(() => {
     <q-card class="q-mb-md shadow-2">
       <q-card-section>
         <div class="row q-col-gutter-md items-end">
-          <div class="col-12 col-sm-3 col-md-2">
+          <div class="col-12 col-sm-6 col-md-2">
             <q-input v-model="filters.dateFrom" type="date" label="Desde" outlined dense bg-color="white" />
           </div>
-          <div class="col-12 col-sm-3 col-md-2">
+          <div class="col-12 col-sm-6 col-md-2">
             <q-input v-model="filters.dateTo" type="date" label="Hasta" outlined dense bg-color="white" />
           </div>
-          <div class="col-12 col-sm-3 col-md-2">
+          <div class="col-12 col-sm-6 col-md-2">
+            <q-select 
+              v-model="filters.siteId" 
+              :options="[{id: null, name: 'Todas las Sedes'}, ...(sites || [])]" 
+              option-value="id" 
+              option-label="name" 
+              emit-value 
+              map-options 
+              label="Sede" 
+              outlined 
+              dense 
+              bg-color="white" 
+            />
+          </div>
+          <div class="col-12 col-sm-6 col-md-2">
             <q-select 
               v-model="filters.diningRoomId" 
-              :options="[{id: null, name: 'Todos'}, ...(diningRooms || [])]" 
+              :options="[{id: null, name: 'Todos los Comedores'}, ...(availableDiningRooms || [])]" 
               option-value="id" 
               option-label="name" 
               emit-value 
@@ -174,7 +208,7 @@ onMounted(() => {
               bg-color="white" 
             />
           </div>
-          <div class="col-12 col-sm-3 col-md-2">
+          <div class="col-12 col-sm-6 col-md-2">
             <q-select 
               v-model="filters.shiftType" 
               :options="shifts" 
@@ -186,7 +220,7 @@ onMounted(() => {
               bg-color="white" 
             />
           </div>
-          <div class="col-12 col-sm-3 col-md-2">
+          <div class="col-12 col-sm-6 col-md-1">
             <q-select 
               v-model="filters.status" 
               :options="statuses" 
@@ -198,7 +232,7 @@ onMounted(() => {
               bg-color="white" 
             />
           </div>
-          <div class="col-12 col-sm-12 col-md-2 text-right">
+          <div class="col-12 col-sm-12 col-md-1 text-right">
             <q-btn color="primary" icon="search" label="Buscar" @click="onSearch" :loading="loading" class="full-width" />
           </div>
         </div>

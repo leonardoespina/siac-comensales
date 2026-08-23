@@ -12,6 +12,7 @@ export async function generateMasterReport(filters: any, user: any) {
   const parsedFilters: reportRepo.MasterReportFilters = {
     dateFrom: new Date(filters.dateFrom),
     dateTo: new Date(filters.dateTo),
+    siteId: filters.siteId ? Number(filters.siteId) : undefined,
     diningRoomId: filters.diningRoomId ? Number(filters.diningRoomId) : undefined,
     shiftType: filters.shiftType || undefined,
     status: filters.status || undefined,
@@ -103,6 +104,7 @@ export async function generateSummaryReport(filters: any, user: any) {
   const parsedFilters: reportRepo.MasterReportFilters = {
     dateFrom: new Date(filters.dateFrom),
     dateTo: new Date(filters.dateTo),
+    siteId: filters.siteId ? Number(filters.siteId) : undefined,
     diningRoomId: filters.diningRoomId ? Number(filters.diningRoomId) : undefined,
     dependencyId: filters.dependencyId ? Number(filters.dependencyId) : undefined,
     subdependencyId: filters.subdependencyId ? Number(filters.subdependencyId) : undefined,
