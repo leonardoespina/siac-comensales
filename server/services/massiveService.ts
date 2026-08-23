@@ -16,12 +16,8 @@ dayjs.extend(customParseFormat)
 export async function getMassiveBatchesList(diningRoomId: number | undefined, dateStr: string, dependencyId?: number | null, subdependencyId?: number | null) {
   const massiveRequests = await massiveRepo.findMassiveRequests(diningRoomId, dateStr, dependencyId, subdependencyId)
 
-  // Filtramos para obtener SOLO los despachos masivos verdaderos:
-  const bulkRequests = massiveRequests.filter(req => 
-    req.details.length > 1 || req.details.some(d => d.quantity > 1)
-  )
-
-  return bulkRequests.map(req => {
+  // Todas las solicitudes con modalidad TAKE_AWAY son despachables como lote masivo
+  return massiveRequests.map(req => {
     const totalViandas = req.details.reduce((sum, d) => sum + d.quantity, 0)
     const isDispatched = req.details.every(d => d.dispatchedAt !== null)
     const firstDispatched = req.details.find(d => d.dispatchedAt !== null)
