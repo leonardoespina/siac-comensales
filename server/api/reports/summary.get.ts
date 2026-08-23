@@ -1,13 +1,11 @@
 import { defineApiHandler } from '../../utils/handler'
-import { requireUserContext, requirePermission } from '../../utils/auth'
+import { requirePermission, requireUserContext } from '../../utils/auth'
 import * as reportService from '../../services/reportService'
 
 export default defineApiHandler(async (event) => {
-  const query = getQuery(event)
   await requirePermission(event, 'REPORT_DASHBOARD', 'read')
   const user = await requireUserContext(event)
+  const query = getQuery(event)
 
-  const result = await reportService.generateMasterReport(query, user)
-
-  return result
+  return await reportService.generateSummaryReport(query, user)
 })

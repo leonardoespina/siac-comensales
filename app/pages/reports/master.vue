@@ -24,7 +24,7 @@ const filters = ref({
 // Search
 const searchQuery = ref('')
 
-// Dropdowns (mocked for now, in a real scenario we'd fetch them or use a store)
+// Dropdowns
 const { data: diningRooms } = useFetch('/api/dining-rooms', {
   transform: (data: any) => data.filter((d: any) => d.active)
 })
@@ -47,11 +47,11 @@ const statuses = [
 
 // Table configuration
 const columns = [
-  { name: 'ticketNo', label: 'NAo Ticket', field: 'ticketNo', align: 'left' as const, sortable: true },
-  { name: 'cedula', label: 'CAcdula', field: 'cedula', align: 'left' as const, sortable: true },
+  { name: 'ticketNo', label: 'N° Ticket', field: 'ticketNo', align: 'left' as const, sortable: true },
+  { name: 'cedula', label: 'Cédula', field: 'cedula', align: 'left' as const, sortable: true },
   { name: 'fullName', label: 'Nombre', field: 'fullName', align: 'left' as const, sortable: true },
   { name: 'gerencia', label: 'Gerencia', field: 'gerencia', align: 'left' as const, sortable: true },
-  { name: 'adscripcion', label: 'AdscripciA3n', field: 'adscripcion', align: 'left' as const, sortable: true },
+  { name: 'adscripcion', label: 'Adscripción', field: 'adscripcion', align: 'left' as const, sortable: true },
   { name: 'comedor', label: 'Comedor', field: 'comedor', align: 'center' as const, sortable: true },
   { name: 'servicio', label: 'Servicio', field: 'servicio', align: 'center' as const, sortable: true },
   { name: 'modalidad', label: 'Modalidad', field: 'modalidad', align: 'center' as const },
@@ -272,13 +272,13 @@ onMounted(() => {
         separator="cell"
       >
         <template v-slot:top-right>
-          <q-input v-model="searchQuery" borderless dense debounce="300" placeholder="Buscar CAcdula / Ticket">
+          <q-input v-model="searchQuery" borderless dense debounce="300" placeholder="Buscar Cédula / Ticket">
             <template v-slot:append>
               <q-icon name="search" />
             </template>
           </q-input>
         </template>
-        
+
         <template v-slot:body-cell-fechaDespacho="props">
           <q-td :props="props">
             <span v-if="props.row.fechaDespacho" class="text-weight-bold text-positive">

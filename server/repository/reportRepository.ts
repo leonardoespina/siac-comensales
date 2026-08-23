@@ -92,3 +92,65 @@ export async function getConsolidatedReport(filters: MasterReportFilters, securi
     ]
   })
 }
+
+export async function getApprovedExtraordinaryForReport(filters: MasterReportFilters, security: SecurityContext) {
+  const whereClause: any = {
+    status: 'APPROVED',
+    deletedAt: null,
+    date: {
+      gte: filters.dateFrom,
+      lte: filters.dateTo
+    }
+  }
+
+  if (filters.diningRoomId) {
+    whereClause.diningRoomId = filters.diningRoomId
+  }
+
+  if (filters.shiftType) {
+    whereClause.shiftType = filters.shiftType
+  }
+
+  // Security Context or Filters for subdependency/dependency
+  const effectiveSubdepId = security.subdependencyId || filters.subdependencyId
+  const effectiveDepId = security.dependencyId || filters.dependencyId
+
+  if (effectiveSubdepId) {
+    whereClause.subdependencyId = effectiveSubdepId
+  } else if (effectiveDepId) {
+    whereClause.OR = [
+      { dependencyId: effectiveDepId },
+      { subdependency: { dependencyId: effectiveDepId } }
+    ]
+  }
+
+  return await prisma.extraordinaryDispatch.findMany({
+    where: whereClause,
+    include: {
+      diningRoom: true,
+      dependency: true,
+      subdependency: {
+        include: {
+          dependency: true
+        }
+      }
+    },
+    orderBy: [
+      { date: 'desc' },
+      { id: 'desc' }
+    ]
+  })
+}
+
+export async function getSummaryCatalog() {
+  return await prisma.dependency.findMany({
+    where: { active: true },
+    include: {
+      subdependencies: {
+        where: { active: true },
+        orderBy: { name: 'asc' }
+      }
+    },
+    orderBy: { name: 'asc' }
+  })
+}
