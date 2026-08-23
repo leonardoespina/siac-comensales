@@ -1,4 +1,4 @@
-﻿import { ref, readonly, onMounted, watch } from 'vue'
+import { ref, readonly, onMounted, watch } from 'vue'
 import { useQuasar } from 'quasar'
 import { useDinersStore } from '~/stores/diners'
 import { useBiometrics } from '~/composables/features/useBiometrics'
@@ -47,16 +47,27 @@ export function useDispatchManagement() {
 
     try {
       const allRooms = await $fetch<any[]>('/api/dining-rooms')
-      // Filtramos para asegurar que incluso los súper usuarios solo vean los comedores activos en los selectores operativos
+      // Filtramos para asegurar que solo vean los comedores activos autorizados
       diningRooms.value = allRooms.filter(dr => dr.active)
-      const isValid = diningRooms.value.some(dr => dr.id === selectedDiningRoomId.value)
-      if (!savedId || !isValid) {
-        selectedDiningRoomId.value = null
-        isDiningRoomModalOpen.value = true
-      } else {
-        // Si ya está configurado, precargar las huellas y encender el Kiosco
+
+      // Regla de Negocio: Si tiene 1 solo comedor autorizado, fijarlo automáticamente y no permitir cambiarlo.
+      if (diningRooms.value.length === 1) {
+        const singleId = diningRooms.value[0].id
+        selectedDiningRoomId.value = singleId
+        localStorage.setItem('dispatch_dining_room_id', singleId.toString())
+        isDiningRoomModalOpen.value = false
         await preloadBiometrics()
         startKioskLoop()
+      } else {
+        const isValid = diningRooms.value.some(dr => dr.id === selectedDiningRoomId.value)
+        if (!savedId || !isValid) {
+          selectedDiningRoomId.value = null
+          isDiningRoomModalOpen.value = true
+        } else {
+          // Si ya está configurado, precargar las huellas y encender el Kiosco
+          await preloadBiometrics()
+          startKioskLoop()
+        }
       }
     } catch (error: any) {
       $q.notify({ type: 'negative', message: 'Error al cargar comedores: ' + (error.data?.message || error.message) })

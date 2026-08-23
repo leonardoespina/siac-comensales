@@ -9,7 +9,21 @@
             <div class="text-h5"><q-icon name="restaurant" size="md" class="q-mr-sm"/> Punto de Despacho</div>
             <div class="text-subtitle2" v-if="selectedDiningRoomId">
               Ubicación: {{ currentDiningRoomName }}
-              <q-btn flat dense icon="edit" size="sm" @click="isDiningRoomModalOpen = true" class="q-ml-sm" />
+              <q-btn 
+                v-if="diningRooms.length > 1" 
+                flat 
+                dense 
+                icon="swap_horiz" 
+                label="Cambiar Sede" 
+                size="sm" 
+                @click="isDiningRoomModalOpen = true" 
+                class="q-ml-sm text-yellow-11"
+              >
+                <q-tooltip>Intercambiar entre sus sedes autorizadas</q-tooltip>
+              </q-btn>
+              <q-chip v-else color="blue-10" text-color="white" size="xs" icon="lock" class="q-ml-sm">
+                Sede Única Asignada
+              </q-chip>
             </div>
             <div class="text-subtitle2" v-else>Control de acceso y entrega de bandejas en puerta</div>
           </q-card-section>
@@ -99,21 +113,21 @@
 
     <!-- Modal Bloqueante: Selección de Comedor (Al arrancar) -->
     <q-dialog v-model="isDiningRoomModalOpen" persistent>
-      <q-card style="min-width: 350px">
+      <q-card style="min-width: 400px">
         <q-card-section class="bg-primary text-white">
-          <div class="text-h6">Configurar Punto de Despacho</div>
+          <div class="text-h6"><q-icon name="storefront" class="q-mr-xs"/> Configurar Punto de Despacho</div>
         </q-card-section>
 
         <q-card-section class="q-pt-md">
           <div class="text-body2 q-mb-md text-grey-8">
-            Por favor, seleccione el comedor donde se encuentra ubicado este lector.
+            Seleccione la sede y comedor autorizado donde operará este lector:
           </div>
           <q-select
             v-model="tempDiningRoomId"
             :options="diningRooms"
             option-value="id"
-            option-label="name"
-            label="Comedor Actual"
+            :option-label="d => d.site?.name ? `${d.name} — Sede ${d.site.name}` : d.name"
+            label="Comedor / Sede Autorizada *"
             outlined
             emit-value
             map-options
@@ -125,7 +139,7 @@
         </q-card-section>
 
         <q-card-actions align="right" class="text-primary">
-          <q-btn flat label="Guardar Ubicación" :disable="!tempDiningRoomId" @click="saveDiningRoomSelection(tempDiningRoomId as number)" />
+          <q-btn flat label="Confirmar Ubicación" :disable="!tempDiningRoomId" @click="saveDiningRoomSelection(tempDiningRoomId as number)" />
         </q-card-actions>
       </q-card>
     </q-dialog>
@@ -159,7 +173,8 @@ const tempDiningRoomId = ref<number | null>(null)
 
 const currentDiningRoomName = computed(() => {
   const dr = diningRooms.value.find(d => d.id === selectedDiningRoomId.value)
-  return dr ? dr.name : ''
+  if (!dr) return ''
+  return dr.site?.name ? `${dr.name} — Sede ${dr.site.name}` : dr.name
 })
 
 // Detener el lector si cambiamos de pantalla

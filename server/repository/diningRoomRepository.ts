@@ -1,9 +1,10 @@
 import { prisma } from '../utils/prisma'
 
-export async function listAll(includeInactive: boolean = false) {
+export async function listAll(includeInactive: boolean = false, siteIds?: number[]) {
   return await prisma.diningRoom.findMany({
     where: {
-      ...(includeInactive ? {} : { active: true })
+      ...(includeInactive ? {} : { active: true }),
+      ...(siteIds && siteIds.length > 0 ? { siteId: { in: siteIds } } : {})
     },
     include: { site: true },
     orderBy: { name: 'asc' }
