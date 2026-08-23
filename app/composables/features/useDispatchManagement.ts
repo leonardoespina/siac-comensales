@@ -186,9 +186,19 @@ export function useDispatchManagement() {
       
       playAlert('SUCCESS')
     } catch (error: any) {
-      const isAlreadyDispatched = error.response?.status === 409
+      const isAlreadyDispatched = error.response?.status === 409 || error.data?.data?.code === 'ALREADY_DISPATCHED'
+      const isWrongRoom = error.data?.data?.code === 'WRONG_DINING_ROOM' || error.data?.code === 'WRONG_DINING_ROOM'
+      const isMassive = error.data?.data?.code === 'MASSIVE_REQUEST' || error.data?.code === 'MASSIVE_REQUEST'
+      const isNoActiveShiftReq = error.data?.data?.code === 'NO_REQUEST_FOR_ACTIVE_SHIFT' || error.data?.code === 'NO_REQUEST_FOR_ACTIVE_SHIFT'
+      
       overlayStatus.value = 'error'
-      overlayTitle.value = isAlreadyDispatched ? 'Alerta de Duplicidad' : 'Acceso Denegado'
+      overlayTitle.value = isAlreadyDispatched 
+        ? 'Alerta de Duplicidad' 
+        : (isMassive 
+            ? 'Retiro Masivo Asignado' 
+            : (isNoActiveShiftReq 
+                ? 'Sin Solicitud para este Turno' 
+                : (isWrongRoom ? 'Comedor No Asignado' : 'Acceso Denegado')))
       overlayMessage.value = error.data?.message || 'No se pudo procesar el despacho.'
       
       console.log('[dispatchFood] Error object:', error)

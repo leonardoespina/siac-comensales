@@ -44,11 +44,10 @@ export default defineApiHandler(async (event) => {
     throw new DomainError('Comensal no encontrado', 'DINER_NOT_FOUND', 404)
   }
 
-  // 3. Buscar TODAS las solicitudes APROBADAS e INDIVIDUALES (DINE_IN) del comensal para HOY
+  // 3. Buscar TODAS las solicitudes APROBADAS del comensal para HOY
   const requestDetails = await prisma.dinerRequestDetail.findMany({
     where: {
       dinerId: diner.id,
-      modality: 'DINE_IN',
       request: {
         date: {
           gte: todayStart,
@@ -71,72 +70,127 @@ export default defineApiHandler(async (event) => {
     throw new DomainError('El comensal no tiene ninguna solicitud aprobada para hoy.', 'NO_APPROVED_REQUEST', 403)
   }
 
-  // 4. Validar que alguna de esas solicitudes pertenezca al comedor donde está el lector
-  const validRoomRequests = requestDetails.filter(d => d.request.diningRoomId === diningRoomId)
-  
-  if (validRoomRequests.length === 0) {
-    // Tiene comida, pero en otra sede
-    const wrongRoom = requestDetails[0].request.diningRoom.name
-    throw new DomainError(`Tiene comida asignada, pero en el comedor: ${wrongRoom}. Diríjase a esa ubicación.`, 'WRONG_DINING_ROOM', 403)
-  }
-
-  // 5. Cargar los horarios de la base de datos
+  // 4. Cargar los horarios activos de la base de datos
   const schedules = await prisma.mealSchedule.findMany({ where: { active: true } })
-  
-  let matchedDetail: any = null
-  let matchedShiftSchedule: any = null
+
+  let currentActiveShift: string | null = null
+  let currentShiftSchedule: any = null
   let upcomingShiftMessage = ''
 
-  // 6. Verificar cuál de los turnos que tiene aprobados está activo en este momento
-  for (const detail of validRoomRequests) {
-    const schedule = schedules.find(s => s.shiftType === detail.request.shiftType)
-    if (!schedule) continue
-
+  // 6. Verificar cuál turno está activo en este momento
+  for (const schedule of schedules) {
     const start = dayjs(schedule.startTime, 'HH:mm')
     const end = dayjs(schedule.endTime, 'HH:mm')
     const nowTime = dayjs(currentTimeStr, 'HH:mm')
-    
+
     let isMatching = false
-    
-    // Lógica inclusiva: >= start y <= end
     if (end.isBefore(start)) {
-      // Cruza la medianoche (ej: 22:00 a 11:30)
-      if (!nowTime.isBefore(start) || !nowTime.isAfter(end)) {
-        isMatching = true
-      }
+      if (!nowTime.isBefore(start) || !nowTime.isAfter(end)) isMatching = true
     } else {
-      // Turno normal
-      if (!nowTime.isBefore(start) && !nowTime.isAfter(end)) {
-        isMatching = true
-      }
+      if (!nowTime.isBefore(start) && !nowTime.isAfter(end)) isMatching = true
     }
 
     if (isMatching) {
-      matchedDetail = detail
-      matchedShiftSchedule = schedule
-      break // Encontramos el turno válido actual
+      currentActiveShift = schedule.shiftType
+      currentShiftSchedule = schedule
+      break
     } else {
-      // Solo guardamos en el mensaje si el turno es en el futuro para hoy
       if (nowTime.isBefore(end)) {
         upcomingShiftMessage += `[${schedule.shiftType}: ${start.format('hh:mm A')} - ${end.format('hh:mm A')}] `
       }
     }
   }
 
-  // Si no hizo match con la hora actual, le decimos en qué horario debe venir
+  // 7. PRIMERA PRIORIDAD: Verificar si el comensal YA retiró su plato individual para el turno activo (en CUALQUIER comedor)
+  if (currentActiveShift) {
+    const alreadyDispatchedInCurrentShift = requestDetails.find(
+      d => d.request.shiftType === currentActiveShift && d.modality === 'DINE_IN' && d.dispatchedAt !== null
+    )
+    if (alreadyDispatchedInCurrentShift) {
+      const dispatchedTime = dayjs(alreadyDispatchedInCurrentShift.dispatchedAt).tz('America/Caracas').format('hh:mm A')
+      const roomName = alreadyDispatchedInCurrentShift.request.diningRoom?.name || 'otro comedor'
+      throw new DomainError(
+        `ALERTA: El comensal ya retiró su ${currentActiveShift} a las ${dispatchedTime} (en ${roomName}).`,
+        'ALREADY_DISPATCHED',
+        409
+      )
+    }
+  }
+
+  // 8. SEGUNDA PRIORIDAD: Buscar si tiene solicitud INDIVIDUAL (DINE_IN) para el turno activo en el comedor actual o en otro
+  let matchedDetail: any = null
+  if (currentActiveShift) {
+    matchedDetail = requestDetails.find(
+      d => d.request.shiftType === currentActiveShift && 
+           d.modality === 'DINE_IN' &&
+           d.request.diningRoomId === diningRoomId && 
+           d.dispatchedAt === null
+    )
+
+    // Si no está asignado a este comedor, pero sí a otro (y no ha sido despachado)
+    if (!matchedDetail) {
+      const wrongRoomDetail = requestDetails.find(
+        d => d.request.shiftType === currentActiveShift && 
+             d.modality === 'DINE_IN' &&
+             d.request.diningRoomId !== diningRoomId && 
+             d.dispatchedAt === null
+      )
+      if (wrongRoomDetail) {
+        const wrongRoom = wrongRoomDetail.request.diningRoom?.name || 'otro comedor'
+        throw new DomainError(
+          `Su ración de ${currentActiveShift} se encuentra asignada al comedor: ${wrongRoom}. Diríjase a esa ubicación.`,
+          'WRONG_DINING_ROOM',
+          403
+        )
+      }
+    }
+  }
+
+  // 9. TERCERA PRIORIDAD: Si NO tiene solicitud individual (DINE_IN), verificar si su comida del turno activo fue solicitada EXCLUSIVAMENTE en modalidad MASIVA (Para Llevar / TAKE_AWAY)
+  if (currentActiveShift && !matchedDetail) {
+    const massiveDetail = requestDetails.find(
+      d => d.request.shiftType === currentActiveShift && d.modality === 'TAKE_AWAY' && d.dispatchedAt === null
+    )
+    if (massiveDetail) {
+      const roomName = massiveDetail.request.diningRoom?.name || 'otro comedor'
+      throw new DomainError(
+        `Su comida fue solicitada en formato Masivo (Para Llevar) y se encuentra asignada al comedor: ${roomName}.`,
+        'MASSIVE_REQUEST',
+        403
+      )
+    }
+  }
+
+  // 9. TERCERA PRIORIDAD: Si no hizo match con el turno o fuera de horario
   if (!matchedDetail) {
+    // Si en este momento HAY un turno activo de comida, pero el comensal no solicitó ración para este turno
+    if (currentActiveShift) {
+      const futureRequested = requestDetails
+        .filter(d => d.dispatchedAt === null)
+        .map(d => d.request.shiftType)
+        .join(', ')
+
+      if (futureRequested) {
+        throw new DomainError(
+          `Su comida no fue solicitada para el turno activo (${currentActiveShift}). Su próximo turno solicitado hoy es: ${futureRequested}.`,
+          'NO_REQUEST_FOR_ACTIVE_SHIFT',
+          403
+        )
+      } else {
+        throw new DomainError(
+          `Su comida no fue solicitada para el turno activo (${currentActiveShift}) ni para el resto del día.`,
+          'NO_REQUEST_FOR_ACTIVE_SHIFT',
+          403
+        )
+      }
+    }
+
     const trimmedMessage = upcomingShiftMessage.trim()
     if (trimmedMessage === '') {
       throw new DomainError('Estás fuera de horario. Ya no tienes más turnos disponibles para el resto del día.', 'OUT_OF_SCHEDULE', 403)
     } else {
       throw new DomainError(`Estás fuera de horario. Tu próximo turno es: ${trimmedMessage}`, 'OUT_OF_SCHEDULE', 403)
     }
-  }
-
-  // 7. Verificar si ese turno específico ya fue despachado
-  if (matchedDetail.dispatchedAt) {
-    const dispatchedTime = dayjs(matchedDetail.dispatchedAt).tz('America/Caracas').format('hh:mm A')
-    throw new DomainError(`ALERTA: El comensal ya retiró su ${matchedShiftSchedule.shiftType} a las ${dispatchedTime}.`, 'ALREADY_DISPATCHED', 409)
   }
 
   // 8. Despachar (Actualizar dispatchedAt)
@@ -157,7 +211,7 @@ export default defineApiHandler(async (event) => {
       cedula: diner.cedula
     },
     dispatch: {
-      shift: matchedShiftSchedule.shiftType,
+      shift: currentShiftSchedule?.shiftType || matchedDetail.request.shiftType,
       modality: updatedDetail.modality,
       rationType: updatedDetail.rationType,
       quantity: updatedDetail.quantity,
