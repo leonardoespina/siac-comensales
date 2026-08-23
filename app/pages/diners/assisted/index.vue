@@ -10,8 +10,12 @@ const diningRoomId = ref<number | null>(null)
 const observations = ref('')
 
 const loadingSearch = ref(false)
+const loadingAssociated = ref(false)
 const dispatchingShift = ref<string | null>(null)
 const contextData = ref<any>(null)
+const associatedDiners = ref<any[]>([])
+const filteredDinerOptions = ref<any[]>([])
+
 const searchError = ref('')
 const actionMessage = ref('')
 const actionError = ref('')
@@ -22,6 +26,72 @@ const { data: diningRooms } = useFetch('/api/dining-rooms', {
   transform: (data: any) => data.filter((d: any) => d.active)
 })
 
+watch(diningRooms, (rooms) => {
+  if (rooms && rooms.length === 1 && !diningRoomId.value) {
+    diningRoomId.value = rooms[0].id
+  }
+}, { immediate: true })
+
+// Load associated diners when diningRoomId changes
+const fetchAssociatedDiners = async () => {
+  if (!diningRoomId.value) {
+    associatedDiners.value = []
+    filteredDinerOptions.value = []
+    return
+  }
+
+  loadingAssociated.value = true
+  try {
+    const res = await $fetch<any>('/api/dispatch/diner-context', {
+      params: { diningRoomId: diningRoomId.value }
+    })
+    associatedDiners.value = res.diners || []
+    filteredDinerOptions.value = associatedDiners.value.map(d => ({
+      label: `V-${d.cedula} - ${d.name} (${d.dependencyName})`,
+      value: d.cedula,
+      diner: d
+    }))
+  } catch (err) {
+    console.error('Error cargando comensales del comedor:', err)
+  } finally {
+    loadingAssociated.value = false
+  }
+}
+
+watch(diningRoomId, () => {
+  fetchAssociatedDiners()
+  contextData.value = null
+  cedulaSearch.value = ''
+})
+
+const filterDiners = (val: string, update: Function) => {
+  if (val === '') {
+    update(() => {
+      filteredDinerOptions.value = associatedDiners.value.map(d => ({
+        label: `V-${d.cedula} - ${d.name} (${d.dependencyName})`,
+        value: d.cedula,
+        diner: d
+      }))
+    })
+    return
+  }
+
+  update(() => {
+    const needle = val.toLowerCase()
+    filteredDinerOptions.value = associatedDiners.value
+      .filter(d => d.cedula.toLowerCase().includes(needle) || d.name.toLowerCase().includes(needle))
+      .map(d => ({
+        label: `V-${d.cedula} - ${d.name} (${d.dependencyName})`,
+        value: d.cedula,
+        diner: d
+      }))
+  })
+}
+
+const selectDiner = (dinerCedula: string) => {
+  cedulaSearch.value = dinerCedula
+  onSearch()
+}
 
 const onSearch = async () => {
   if (!cedulaSearch.value) return
@@ -67,12 +137,13 @@ const onDispatch = async (shift: string) => {
     
     actionMessage.value = res.message
     
-    // Refresh context silently
+    // Refresh context silently and reload associated list
     const refreshRes = await $fetch('/api/dispatch/diner-context', {
       params: { cedula: cedulaSearch.value }
     })
     contextData.value = refreshRes
     observations.value = ''
+    await fetchAssociatedDiners()
     
   } catch (err: any) {
     actionError.value = err.data?.statusMessage || err.message || 'Error desconocido'
@@ -110,17 +181,18 @@ const getShiftStatus = (shift: string) => {
             v-model="diningRoomId"
             :options="diningRooms"
             option-value="id"
-            option-label="name"
+            :option-label="d => d.site?.name ? `${d.name} — Sede ${d.site.name}` : d.name"
             emit-value
             map-options
-            label="Comedor de Operación"
+            label="Sede / Comedor de Operación *"
             outlined
             dense
             bg-color="white"
-            style="min-width: 250px"
+            style="min-width: 280px"
+            :disable="diningRooms?.length === 1"
           >
             <template v-slot:prepend>
-              <q-icon name="restaurant" />
+              <q-icon name="storefront" />
             </template>
           </q-select>
         </div>
@@ -136,21 +208,37 @@ const getShiftStatus = (shift: string) => {
           <q-card-section>
             <form @submit.prevent="onSearch" class="row q-col-gutter-md items-center">
               <div class="col-12 col-sm-8 col-md-9">
-                <q-input
+                <q-select
                   v-model="cedulaSearch"
-                  label="Buscar Cédula"
+                  :options="filteredDinerOptions"
+                  option-value="value"
+                  option-label="label"
+                  emit-value
+                  map-options
+                  use-input
+                  hide-selected
+                  fill-input
+                  input-debounce="300"
+                  @filter="filterDiners"
+                  @update:model-value="onSearch"
+                  label="Buscar por Cédula o Nombre del Comensal *"
                   outlined
                   dense
                   bg-color="white"
-                  mask="########"
-                  hint="Ej: 12345678"
-                  :loading="loadingSearch"
-                  autofocus
+                  :loading="loadingSearch || loadingAssociated"
+                  hint="Escriba la cédula/nombre o seleccione de la lista del comedor"
                 >
                   <template v-slot:prepend>
-                    <q-icon name="badge" />
+                    <q-icon name="person_search" color="primary" />
                   </template>
-                </q-input>
+                  <template v-slot:no-option>
+                    <q-item>
+                      <q-item-section class="text-grey">
+                        {{ diningRoomId ? 'No hay comensales encontrados para la búsqueda' : 'Seleccione un Comedor de Operación primero' }}
+                      </q-item-section>
+                    </q-item>
+                  </template>
+                </q-select>
               </div>
               <div class="col-12 col-sm-4 col-md-3">
                 <q-btn
@@ -160,11 +248,36 @@ const getShiftStatus = (shift: string) => {
                   type="submit"
                   class="full-width"
                   size="md"
-                  :disable="cedulaSearch.length < 6"
+                  :disable="!cedulaSearch"
                 />
               </div>
             </form>
-            
+
+            <!-- Acceso Rápido: Comensales Asignados Hoy en este Comedor -->
+            <div v-if="diningRoomId && associatedDiners.length > 0" class="q-mt-md">
+              <div class="text-caption text-grey-8 q-mb-xs row items-center">
+                <q-icon name="groups" class="q-mr-xs" color="primary" />
+                <span>Comensales asociados hoy a este comedor ({{ associatedDiners.length }}):</span>
+              </div>
+              <div class="row q-gutter-xs">
+                <q-chip
+                  v-for="diner in associatedDiners.slice(0, 8)"
+                  :key="diner.id"
+                  clickable
+                  color="blue-1"
+                  text-color="primary"
+                  icon="person"
+                  size="sm"
+                  @click="selectDiner(diner.cedula)"
+                >
+                  {{ diner.name.split(' ')[0] }} ({{ diner.cedula }})
+                </q-chip>
+                <q-chip v-if="associatedDiners.length > 8" size="sm" color="grey-3" text-color="grey-8">
+                  +{{ associatedDiners.length - 8 }} más
+                </q-chip>
+              </div>
+            </div>
+
             <q-banner v-if="searchError" class="bg-negative text-white q-mt-md rounded-borders">
               <template v-slot:avatar>
                 <q-icon name="error" />

@@ -1,5 +1,5 @@
 import { defineApiHandler } from '../../utils/handler'
-import { requireUserContext } from '../../utils/auth'
+import { requireUserContext, requirePermission } from '../../utils/auth'
 import { prisma } from '../../utils/prisma'
 import { DomainError } from '../../domain/errors'
 import dayjs from 'dayjs'
@@ -28,11 +28,11 @@ export default defineApiHandler(async (event) => {
   const todayStart = dayjs.utc(now.format('YYYY-MM-DD')).toDate()
   const todayEnd = dayjs.utc(now.format('YYYY-MM-DD')).endOf('day').toDate()
 
-  // 2. Regla de Oro: Buscar si ya tiene una comida despachada (Doble Plato)
+  // 2. Regla de Oro: Buscar si ya tiene una comida despachada (Doble Plato Individual en Bandeja)
   const existingDispatched = await prisma.dinerRequestDetail.findFirst({
     where: {
       dinerId: diner.id,
-      modality: 'DINE_IN', // Solo verificamos las bandejas individuales consumidas en sitio
+      modality: 'DINE_IN',
       dispatchedAt: { not: null },
       request: {
         date: {
@@ -52,7 +52,7 @@ export default defineApiHandler(async (event) => {
     throw new DomainError(`¡Alto! Este comensal ya retiró su ${shiftType} a las ${hhmm}.`, 403, 'DOUBLE_DISH')
   }
 
-  // 3. Buscar si tiene una solicitud pendiente sin despachar
+  // 3. Buscar si tiene una solicitud individual pendiente sin despachar
   const pendingRequest = await prisma.dinerRequestDetail.findFirst({
     where: {
       dinerId: diner.id,
@@ -73,6 +73,7 @@ export default defineApiHandler(async (event) => {
     }
   })
 
+  await requirePermission(event, 'DINERS_REQUESTS', 'create')
   const user = await requireUserContext(event)
 
   if (pendingRequest) {
@@ -89,9 +90,8 @@ export default defineApiHandler(async (event) => {
       dinerName: diner.name
     }
   } else {
-    // Caso B: No tenía comida asignada (Crear Emergencia)
-    // Create the Request
-    const batchCode = `EMERGENCIA-ASISTIDO-${Date.now().toString().slice(-6)}`
+    // Caso B: No tenía comida asignada (Crear Solicitud y Despachar)
+    const batchCode = `REQ-${dayjs(now).format('YYMMDD')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`
     
     await prisma.dinerRequest.create({
       data: {
@@ -103,7 +103,6 @@ export default defineApiHandler(async (event) => {
         approvedById: user.id,
         diningRoomId: diningRoomId,
         targetSubdependencyId: diner.subdependencyId,
-        observations: observations || 'Despacho asistido libre generado por el operador.',
         details: {
           create: [{
             dinerId: diner.id,
@@ -111,14 +110,14 @@ export default defineApiHandler(async (event) => {
             modality: 'DINE_IN',
             dispatchedAt: new Date(),
             dispatchedById: user.id,
-            isEmergency: true
+            isEmergency: false
           }]
         }
       }
     })
 
     return {
-      message: 'Despacho asistido exitoso (Emergencia generada).',
+      message: 'Despacho asistido exitoso.',
       dinerName: diner.name
     }
   }

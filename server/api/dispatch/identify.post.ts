@@ -1,4 +1,5 @@
 import { defineApiHandler } from '../../utils/handler'
+import { requirePermission } from '../../utils/auth'
 import { prisma } from '../../utils/prisma'
 import { DomainError } from '../../domain/errors'
 import dayjs from 'dayjs'
@@ -14,6 +15,7 @@ dayjs.extend(customParseFormat)
 
 export default defineApiHandler(async (event) => {
   const body = await readBody(event)
+  await requirePermission(event, 'DISPATCH', 'create')
   const cedula = body.cedula?.trim()
 
   const diningRoomId = body.diningRoomId
@@ -42,10 +44,11 @@ export default defineApiHandler(async (event) => {
     throw new DomainError('Comensal no encontrado', 'DINER_NOT_FOUND', 404)
   }
 
-  // 3. Buscar TODAS las solicitudes APROBADAS del comensal para HOY
+  // 3. Buscar TODAS las solicitudes APROBADAS e INDIVIDUALES (DINE_IN) del comensal para HOY
   const requestDetails = await prisma.dinerRequestDetail.findMany({
     where: {
       dinerId: diner.id,
+      modality: 'DINE_IN',
       request: {
         date: {
           gte: todayStart,
