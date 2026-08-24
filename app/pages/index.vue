@@ -4,6 +4,8 @@ import { useDashboard } from '~/composables/features/useDashboard'
 const {
   auth,
   canManageDiners,
+  metrics,
+  loadingMetrics,
   goTo
 } = useDashboard()
 
@@ -75,7 +77,7 @@ const {
             </div>
           </div>
           
-          <!-- Panel de Métricas de Comensales (Nuevo) -->
+          <!-- Panel de Métricas de Comensales -->
           <div class="col-12 col-md-6">
             <q-card flat bordered class="h-full bg-grey-2">
               <q-card-section class="q-pb-none">
@@ -87,18 +89,23 @@ const {
               </q-card-section>
               
               <q-card-section class="row q-col-gutter-sm text-center q-pt-md">
-                <!-- Se conectarán estas variables al store de comensales -->
                 <div class="col-6">
                   <q-card class="bg-white q-pa-md h-full" flat bordered>
                     <q-icon name="groups" size="xl" color="primary" class="q-mb-sm opacity-80" />
-                    <div class="text-h5 text-weight-bold">---</div>
+                    <div class="text-h5 text-weight-bold text-primary">
+                      <q-spinner-dots v-if="loadingMetrics" size="sm" />
+                      <span v-else>{{ metrics.registeredDiners }}</span>
+                    </div>
                     <div class="text-caption text-grey-8">Comensales Registrados</div>
                   </q-card>
                 </div>
                 <div class="col-6">
                   <q-card class="bg-white q-pa-md h-full" flat bordered>
                     <q-icon name="receipt_long" size="xl" color="orange-8" class="q-mb-sm opacity-80" />
-                    <div class="text-h5 text-weight-bold">---</div>
+                    <div class="text-h5 text-weight-bold text-orange-9">
+                      <q-spinner-dots v-if="loadingMetrics" size="sm" />
+                      <span v-else>{{ metrics.todayRequests }}</span>
+                    </div>
                     <div class="text-caption text-grey-8">Peticiones de Hoy</div>
                   </q-card>
                 </div>
