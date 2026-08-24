@@ -12,8 +12,9 @@ export default defineApiHandler(async (event) => {
 
   // Limpiamos la cookie seteándola con una fecha de expiración en el pasado
   deleteCookie(event, 'auth_token', {
+    path: '/',
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: getRequestURL(event).protocol === 'https:',
     sameSite: 'lax'
   })
 
