@@ -68,3 +68,23 @@ export class ConflictError extends DomainError {
     super(`${entity}: ${message}`, 'CONFLICT', 409)
   }
 }
+
+/**
+ * Usado cuando un usuario intenta iniciar sesión pero ya tiene otra sesión activa.
+ * Genera un HTTP 409.
+ */
+export class ActiveSessionExistsError extends DomainError {
+  constructor(message = 'Ya existe una sesión activa registrada en otro equipo. ¿Deseas desconectar la otra sesión e ingresar aquí?') {
+    super(message, 'ACTIVE_SESSION_EXISTS', 409)
+  }
+}
+
+/**
+ * Usado cuando el token del usuario ha sido revocado por una nueva sesión en otro equipo.
+ * Genera un HTTP 401.
+ */
+export class SessionTerminatedError extends DomainError {
+  constructor(message = 'Tu sesión fue cerrada porque se inició sesión en otro dispositivo') {
+    super(message, 'SESSION_TERMINATED_CONCURRENT', 401)
+  }
+}

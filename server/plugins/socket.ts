@@ -30,6 +30,13 @@ export default defineNitroPlugin((nitroApp) => {
           }
         })
       })
+
+      // Escuchar eventos del EventBus y transmitirlos a Socket.io
+      import('../utils/eventBus').then(({ eventBus }) => {
+        eventBus.on('session:revoked', ({ userId, newSessionId }) => {
+          io.to(`user_${userId}`).emit('session:revoked', { userId, newSessionId })
+        })
+      })
     }
   })
 })

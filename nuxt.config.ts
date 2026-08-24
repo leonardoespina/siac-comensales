@@ -33,7 +33,7 @@ export default defineNuxtConfig({
     '/api/auth/login': {
       security: {
         rateLimiter: {
-          tokensPerInterval: 5,
+          tokensPerInterval: 15,
           interval: 60000,
         }
       }

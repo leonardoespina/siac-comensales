@@ -33,6 +33,10 @@ export type AppEvents = {
   
   // Turnos en tiempo real (Sockets)
   'shift:sync': { action: 'create' | 'update', shift: any }
+  
+  // Sesiones de Usuario en tiempo real
+  'session:revoked': { userId: number, newSessionId: string }
+  'session:closed': { userId: number }
 }
 
 // Singleton in-memory bus (Resistente a HMR de Nuxt en desarrollo)

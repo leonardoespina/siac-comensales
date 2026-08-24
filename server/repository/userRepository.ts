@@ -18,6 +18,38 @@ export async function findUserByCedula(cedula: string) {
   })
 }
 
+export async function findUserWithAuth(cedula: string) {
+  return prisma.user.findUnique({
+    where: { cedula },
+    include: {
+      role: {
+        include: {
+          permissions: {
+            include: { module: true }
+          }
+        }
+      },
+      subdependency: {
+        select: {
+          name: true,
+          dependencyId: true,
+          dependency: { select: { name: true } }
+        }
+      }
+    }
+  })
+}
+
+export async function updateUserSession(id: number, activeSessionId: string | null, lastActiveAt: Date | null = new Date()) {
+  return prisma.user.update({
+    where: { id },
+    data: {
+      activeSessionId,
+      lastActiveAt
+    }
+  })
+}
+
 export async function createUser(data: Prisma.UserCreateInput) {
   return prisma.user.create({
     data,

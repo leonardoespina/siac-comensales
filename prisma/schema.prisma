@@ -96,7 +96,9 @@ model User {
   roleId Int  @map("role_id")
   role   Role @relation(fields: [roleId], references: [id], onDelete: Restrict)
 
-
+  // Control de Sesión Única e Inactividad
+  activeSessionId String?   @map("active_session_id")
+  lastActiveAt    DateTime? @map("last_active_at")
 
   // Aislamiento por Sede (Soporte Multi-Sede M:N)
   sites Site[] @relation("UserSites")

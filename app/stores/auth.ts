@@ -47,10 +47,10 @@ export const useAuthStore = defineStore('auth', () => {
     navigateTo('/login')
   }
 
-  async function login(cedula: string, password: string) {
+  async function login(cedula: string, password: string, force = false) {
     const response = await $fetch('/api/auth/login', {
       method: 'POST',
-      body: { cedula, password }
+      body: { cedula, password, force }
     })
     setAuth(response.user)
   }
