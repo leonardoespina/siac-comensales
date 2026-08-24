@@ -103,15 +103,15 @@ const columns = [
 const CATEGORIES = {
   DINERS: {
     label: '🧑‍🤝‍🧑 Gestión de Comensales y Peticiones',
-    codes: ['DINERS', 'DINERS_REQUESTS', 'MY_SQUADS', 'DISPATCH']
+    codes: ['DINERS', 'DINERS_REQUESTS', 'MY_SQUADS', 'DISPATCH', 'ASSISTED_DISPATCH', 'DISPATCH_HISTORY', 'EXTRAORDINARY', 'MASSIVE_DISPATCH']
   },
   CATALOGS: {
     label: '📋 Catálogos Base del Comedor',
     codes: ['SITES', 'DINING_ROOMS', 'SQUADS', 'POSITIONS']
   },
   REPORTS: {
-    label: '📑 Reportes del Sistema',
-    codes: ['REPORT_DASHBOARD']
+    label: '📊 Reportes y Estadística',
+    codes: ['REPORT_DASHBOARD', 'REPORT_MASTER', 'REPORT_SUMMARY']
   },
   SECURITY: {
     label: '⚙️ Seguridad y Estructura Organizacional',
@@ -124,24 +124,18 @@ const groupedPermissions = computed(() => {
     DINERS: [],
     CATALOGS: [],
     REPORTS: [],
-    SECURITY: [],
-    OTHER: []
+    SECURITY: []
   }
 
   form.value.permissions.forEach((perm, originalIndex) => {
     const module = store.modules.find(m => m.id === perm.moduleId)
     const code = module ? module.code : ''
     
-    let assigned = false
     for (const [key, category] of Object.entries(CATEGORIES)) {
       if (category.codes.includes(code)) {
         groups[key].push({ perm, originalIndex, moduleName: module?.name || 'Desconocido', moduleCode: code })
-        assigned = true
         break
       }
-    }
-    if (!assigned) {
-      groups.OTHER.push({ perm, originalIndex, moduleName: module?.name || 'Desconocido', moduleCode: code })
     }
   })
 

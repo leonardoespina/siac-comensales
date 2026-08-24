@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
 
 const auth = useAuthStore()
@@ -18,11 +18,11 @@ const auth = useAuthStore()
     
     <q-separator class="q-my-md" />
 
-    <!-- Menú Dinámico: Gestión de Comensales -->
+    <!-- Menú Dinámico: Gestión de Comensales y Peticiones -->
     <q-expansion-item
       icon="groups"
-      label="Gestión de Comensales"
-      v-if="auth.isAuthenticated && (auth.hasPermission('DINERS', 'canRead') || auth.hasPermission('DINERS_REQUESTS', 'canRead') || auth.hasPermission('MY_SQUADS', 'canRead') || auth.hasPermission('EXTRAORDINARY', 'canRead'))"
+      label="Gestión de Comensales y Peticiones"
+      v-if="auth.isAuthenticated && (auth.hasPermission('DINERS', 'canRead') || auth.hasPermission('DINERS_REQUESTS', 'canRead') || auth.hasPermission('MY_SQUADS', 'canRead') || auth.hasPermission('EXTRAORDINARY', 'canRead') || auth.hasPermission('DISPATCH', 'canRead') || auth.hasPermission('ASSISTED_DISPATCH', 'canRead') || auth.hasPermission('DISPATCH_HISTORY', 'canRead') || auth.hasPermission('MASSIVE_DISPATCH', 'canRead') || auth.hasPermission('GLOBAL_ACCESS', 'canRead'))"
     >
       <q-list class="q-pl-lg">
         <q-item clickable v-ripple to="/diners/requests" active-class="text-primary" v-if="auth.hasPermission('DINERS_REQUESTS', 'canRead') || auth.hasPermission('DINERS_REQUESTS', 'canCreate')">
@@ -35,14 +35,14 @@ const auth = useAuthStore()
           <q-item-section>Mis Cuadrillas</q-item-section>
         </q-item>
         
-        <q-item clickable v-ripple to="/diners/dispatch" active-class="bg-blue-1 text-primary" v-if="auth.hasPermission('DINERS_REQUESTS', 'canRead')">
+        <q-item clickable v-ripple to="/diners/dispatch" active-class="bg-blue-1 text-primary" v-if="auth.hasPermission('DISPATCH', 'canRead')">
           <q-item-section avatar><q-icon name="meeting_room" size="sm" /></q-item-section>
           <q-item-section>Despacho</q-item-section>
         </q-item>
 
         <q-item clickable v-ripple to="/extraordinary" active-class="bg-orange-1 text-orange-9" v-if="auth.hasPermission('EXTRAORDINARY', 'canRead')">
           <q-item-section avatar><q-icon name="badge" size="sm" /></q-item-section>
-          <q-item-section>Visitas Extras</q-item-section>
+          <q-item-section>Visitas y Extraordinarios</q-item-section>
         </q-item>
 
         <q-item clickable v-ripple to="/diners/workers" active-class="text-primary" v-if="auth.hasPermission('DINERS', 'canRead')">
@@ -50,14 +50,14 @@ const auth = useAuthStore()
           <q-item-section>Comensales Físicos</q-item-section>
         </q-item>
 
-        <q-item clickable v-ripple to="/diners/assisted" active-class="bg-blue-1 text-primary">
+        <q-item clickable v-ripple to="/diners/assisted" active-class="bg-blue-1 text-primary" v-if="auth.hasPermission('ASSISTED_DISPATCH', 'canRead')">
           <q-item-section avatar>
             <q-icon name="support_agent" />
           </q-item-section>
           <q-item-section>Despacho Asistido</q-item-section>
         </q-item>
         
-        <q-item clickable v-ripple to="/diners/dispatch-history" active-class="bg-blue-1 text-primary">
+        <q-item clickable v-ripple to="/diners/dispatch-history" active-class="bg-blue-1 text-primary" v-if="auth.hasPermission('DISPATCH_HISTORY', 'canRead')">
           <q-item-section avatar>
             <q-icon name="history" />
           </q-item-section>
@@ -149,12 +149,17 @@ const auth = useAuthStore()
     <q-expansion-item
       icon="analytics"
       label="Reportes y Estadísticas"
-      v-if="auth.isAuthenticated && (auth.hasPermission('REPORTS', 'canRead') || auth.hasPermission('GLOBAL_ACCESS', 'canRead') || auth.hasPermission('DINERS_REQUESTS', 'canRead'))"
+      v-if="auth.isAuthenticated && (auth.hasPermission('REPORT_MASTER', 'canRead') || auth.hasPermission('REPORT_SUMMARY', 'canRead'))"
     >
       <q-list class="q-pl-lg">
-        <q-item clickable v-ripple to="/reports/master" active-class="bg-blue-1 text-primary">
+        <q-item clickable v-ripple to="/reports/master" active-class="bg-blue-1 text-primary" v-if="auth.hasPermission('REPORT_MASTER', 'canRead')">
           <q-item-section avatar><q-icon name="summarize" size="sm" /></q-item-section>
           <q-item-section>Reporte Maestro (Kardex)</q-item-section>
+        </q-item>
+        
+        <q-item clickable v-ripple to="/reports/summary" active-class="bg-blue-1 text-primary" v-if="auth.hasPermission('REPORT_SUMMARY', 'canRead')">
+          <q-item-section avatar><q-icon name="table_chart" size="sm" /></q-item-section>
+          <q-item-section>Resumen por Gerencias</q-item-section>
         </q-item>
       </q-list>
     </q-expansion-item>

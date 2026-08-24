@@ -14,7 +14,9 @@ async function main() {
   // 1. Crear los módulos específicos para el sistema de Comensales
   const modulesData = [
     { code: 'SECURITY', name: 'Seguridad y Accesos' },
-    { code: 'REPORT_DASHBOARD', name: 'Reporte: Dashboard Principal' },
+    { code: 'REPORT_DASHBOARD', name: 'Reporte: Dashboard de Estadísticas' },
+    { code: 'REPORT_MASTER', name: 'Reporte: Kardex Maestro de Solicitudes' },
+    { code: 'REPORT_SUMMARY', name: 'Reporte: Resumen Consolidado por Gerencias' },
     { code: 'POSITIONS', name: 'Catálogo de Cargos' },
     { code: 'DINERS', name: 'Directorio de Comensales' },
     { code: 'BIOMETRIC', name: 'Gestión Biométrica' },
@@ -26,6 +28,9 @@ async function main() {
     { code: 'MEAL_SCHEDULES', name: 'Horarios de Comedor' },
     { code: 'SITES', name: 'Gestión de Sedes' },
     { code: 'AUDIT', name: 'Auditoría del Sistema' },
+    { code: 'DISPATCH', name: 'Despacho' },
+    { code: 'ASSISTED_DISPATCH', name: 'Despacho Asistido' },
+    { code: 'DISPATCH_HISTORY', name: 'Historial de Despachos' },
     { code: 'MASSIVE_DISPATCH', name: 'Despacho Masivo (Viandas)' },
     { code: 'GLOBAL_ACCESS', name: 'Acceso Global sin Restricciones' }
   ]
