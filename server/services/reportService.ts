@@ -1,6 +1,8 @@
 import * as reportRepo from '../repository/reportRepository'
 import { DomainError } from '../domain/errors'
 
+const isValidId = (val: any) => val !== undefined && val !== null && val !== ''
+
 // We need user context to apply RLS
 export async function generateMasterReport(filters: any, user: any) {
   // Validate basic input
@@ -12,12 +14,12 @@ export async function generateMasterReport(filters: any, user: any) {
   const parsedFilters: reportRepo.MasterReportFilters = {
     dateFrom: new Date(filters.dateFrom),
     dateTo: new Date(filters.dateTo),
-    siteId: filters.siteId ? Number(filters.siteId) : undefined,
-    diningRoomId: filters.diningRoomId ? Number(filters.diningRoomId) : undefined,
+    siteId: isValidId(filters.siteId) ? Number(filters.siteId) : undefined,
+    diningRoomId: isValidId(filters.diningRoomId) ? Number(filters.diningRoomId) : undefined,
     shiftType: filters.shiftType || undefined,
     status: filters.status || undefined,
-    dependencyId: filters.dependencyId ? Number(filters.dependencyId) : undefined,
-    subdependencyId: filters.subdependencyId ? Number(filters.subdependencyId) : undefined
+    dependencyId: isValidId(filters.dependencyId) ? Number(filters.dependencyId) : undefined,
+    subdependencyId: isValidId(filters.subdependencyId) ? Number(filters.subdependencyId) : undefined
   }
 
   // Security Context (Row-Level Security)
@@ -104,10 +106,10 @@ export async function generateSummaryReport(filters: any, user: any) {
   const parsedFilters: reportRepo.MasterReportFilters = {
     dateFrom: new Date(filters.dateFrom),
     dateTo: new Date(filters.dateTo),
-    siteId: filters.siteId ? Number(filters.siteId) : undefined,
-    diningRoomId: filters.diningRoomId ? Number(filters.diningRoomId) : undefined,
-    dependencyId: filters.dependencyId ? Number(filters.dependencyId) : undefined,
-    subdependencyId: filters.subdependencyId ? Number(filters.subdependencyId) : undefined,
+    siteId: isValidId(filters.siteId) ? Number(filters.siteId) : undefined,
+    diningRoomId: isValidId(filters.diningRoomId) ? Number(filters.diningRoomId) : undefined,
+    dependencyId: isValidId(filters.dependencyId) ? Number(filters.dependencyId) : undefined,
+    subdependencyId: isValidId(filters.subdependencyId) ? Number(filters.subdependencyId) : undefined,
     status: filters.status || undefined
   }
 

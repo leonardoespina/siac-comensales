@@ -36,7 +36,7 @@ const { data: diningRooms } = useFetch('/api/dining-rooms', {
 
 const availableDiningRooms = computed(() => {
   if (!diningRooms.value) return []
-  if (!filters.value.siteId) return diningRooms.value
+  if (filters.value.siteId === null || filters.value.siteId === undefined) return diningRooms.value
   return diningRooms.value.filter((d: any) => d.siteId === filters.value.siteId)
 })
 

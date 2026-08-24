@@ -33,9 +33,9 @@ export async function getConsolidatedReport(filters: MasterReportFilters, securi
   }
 
   // Filters
-  if (filters.diningRoomId) {
+  if (filters.diningRoomId !== undefined && filters.diningRoomId !== null) {
     whereClause.request.diningRoomId = filters.diningRoomId
-  } else if (filters.siteId) {
+  } else if (filters.siteId !== undefined && filters.siteId !== null) {
     whereClause.request.diningRoom = { siteId: filters.siteId }
   }
 
@@ -107,9 +107,9 @@ export async function getApprovedExtraordinaryForReport(filters: MasterReportFil
     }
   }
 
-  if (filters.diningRoomId) {
+  if (filters.diningRoomId !== undefined && filters.diningRoomId !== null) {
     whereClause.diningRoomId = filters.diningRoomId
-  } else if (filters.siteId) {
+  } else if (filters.siteId !== undefined && filters.siteId !== null) {
     whereClause.diningRoom = { siteId: filters.siteId }
   }
 
