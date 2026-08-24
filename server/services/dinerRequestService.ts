@@ -166,22 +166,29 @@ export const dinerRequestService = {
     return createdRequests
   },
 
-  async deleteRequest(id: number, targetDate: Date, hasGlobalBypass: boolean) {
-    // Para dar de baja, también debemos verificar el Cutoff
-    // Convertimos el objeto Date de DB devuelta a string para validar
+  async deleteRequest(id: number, targetDate: Date, hasGlobalBypass: boolean, userContext?: any) {
+    if (userContext && !userContext.isGlobal && userContext.subdependencyId) {
+      const request = await dinerRequestRepository.findById(id)
+      if (request && request.targetSubdependencyId && request.targetSubdependencyId !== userContext.subdependencyId) {
+        throw new DomainError('No tienes permisos para eliminar solicitudes de otra subdependencia.', 'FORBIDDEN', 403)
+      }
+    }
+
     const dateStr = targetDate.toISOString().split('T')[0]
-    
-    // Validar tiempo de corte (solo elimina el día previo)
     await this.validateTimeRule(dateStr, 'DELETE', hasGlobalBypass)
     return dinerRequestRepository.deleteWithDetails(id)
   },
 
-  async deleteRequestsBulk(ids: number[], hasGlobalBypass: boolean) {
+  async deleteRequestsBulk(ids: number[], hasGlobalBypass: boolean, userContext?: any) {
     const requests = await dinerRequestRepository.findManyByIds(ids)
     if (requests.length === 0) return { count: 0 }
 
-    // Validar tiempo de cierre para todas las solicitudes
     for (const req of requests) {
+      if (userContext && !userContext.isGlobal && userContext.subdependencyId) {
+        if (req.targetSubdependencyId && req.targetSubdependencyId !== userContext.subdependencyId) {
+          throw new DomainError('No tienes permisos para eliminar solicitudes de otra subdependencia.', 'FORBIDDEN', 403)
+        }
+      }
       const dateStr = req.date.toISOString().split('T')[0]
       await this.validateTimeRule(dateStr, 'DELETE', hasGlobalBypass)
     }
@@ -194,7 +201,7 @@ export const dinerRequestService = {
     targetSubdependencyId?: number,
     diningRoomId?: number, 
     shifts: { shiftType: string, diners: any[] }[]
-  }, userId: number, hasGlobalBypass: boolean) {
+  }, userId: number, hasGlobalBypass: boolean, userContext?: any) {
     if (!data.shifts || data.shifts.length === 0) {
       throw createError({ statusCode: 400, statusMessage: 'Debe seleccionar al menos un comensal en algún turno.' })
     }
@@ -218,13 +225,47 @@ export const dinerRequestService = {
       throw createError({ statusCode: 404, statusMessage: 'No se encontraron solicitudes válidas para actualizar.' })
     }
 
+    // Aislamiento por Subdependencia: Si no es admin global, validar que la solicitud pertenezca a su subdependencia
+    if (userContext && !userContext.isGlobal && userContext.subdependencyId) {
+      for (const req of requestsToUpdate) {
+        if (req.targetSubdependencyId && req.targetSubdependencyId !== userContext.subdependencyId) {
+          throw new DomainError('No tienes permisos para modificar solicitudes pertenecientes a otra subdependencia.', 'FORBIDDEN', 403)
+        }
+      }
+    }
+
     // Determinar si es una edición completa o solo un cambio de comedor de emergencia.
-    // Lo verificamos comprobando si la cantidad de comensales y turnos se mantuvo idéntica.
-    const existingDinersCount = requestsToUpdate.reduce((acc, req) => acc + req.details.length, 0)
-    const incomingDinersCount = data.shifts.reduce((acc, shift) => acc + shift.diners.length, 0)
-    
-    // Si la cantidad de personas comerá es la misma, se asume que solo están redireccionando el comedor.
-    const isOnlyRoomChange = existingDinersCount === incomingDinersCount
+    // Para calificar verdaderamente como EMERGENCY_ROOM_CHANGE:
+    // La lista de comensales, platos, cantidades y turnos debe ser 100% IDÉNTICA. Únicamente se permite diferir el comedor.
+    const existingSignatures = new Set<string>()
+    let existingTotalCount = 0
+    for (const req of requestsToUpdate) {
+      for (const d of req.details) {
+        existingTotalCount++
+        existingSignatures.add(`${d.dinerId}_${req.shiftType}_${d.quantity || 1}_${d.modality || 'DINE_IN'}`)
+      }
+    }
+
+    const incomingSignatures = new Set<string>()
+    let incomingTotalCount = 0
+    for (const shift of data.shifts) {
+      for (const diner of shift.diners) {
+        incomingTotalCount++
+        incomingSignatures.add(`${diner.id}_${shift.shiftType}_${diner.quantity || 1}_${diner.modality || 'DINE_IN'}`)
+      }
+    }
+
+    let isOnlyRoomChange = false
+    if (existingTotalCount === incomingTotalCount && existingSignatures.size === incomingSignatures.size) {
+      isOnlyRoomChange = true
+      for (const sig of incomingSignatures) {
+        if (!existingSignatures.has(sig)) {
+          isOnlyRoomChange = false
+          break
+        }
+      }
+    }
+
     const actionType = isOnlyRoomChange ? 'EMERGENCY_ROOM_CHANGE' : 'UPDATE_GENERAL'
 
     // Validar políticas de tiempo

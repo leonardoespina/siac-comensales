@@ -102,12 +102,17 @@ export const dinerRequestRepository = {
       // 3. Crear los detalles masivos
       const detailsData = diners.map(diner => {
         const input = dinersInput.find(di => di.id === diner.id)
+        const qty = input?.quantity || 1
+        // Si la cantidad es mayor a 1 (lote masivo/viandas), la ración del lote por defecto es NORMAL,
+        // reservando DIETA únicamente para consumos individuales (qty === 1) con perfil de dieta.
+        const effectiveRationType = qty > 1 ? 'NORMAL' : (diner.rationType || 'NORMAL')
+
         return {
           requestId: request.id,
           dinerId: diner.id,
-          rationType: diner.rationType, // Se arrastra automáticamente del perfil
-          modality: input?.modality || 'DINE_IN', // Toma el flag del input o por defecto en bandeja
-          quantity: input?.quantity || 1
+          rationType: effectiveRationType,
+          modality: input?.modality || 'DINE_IN',
+          quantity: qty
         }
       })
 

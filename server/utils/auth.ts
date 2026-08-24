@@ -56,6 +56,19 @@ export async function requireUserContext(event: H3Event) {
 }
 
 /**
+ * Verifica si el usuario tiene permiso para saltarse las reglas de tiempo (Cutoff)
+ */
+export async function hasGlobalTimeBypass(userId: number): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { role: { include: { permissions: { include: { module: true } } } } }
+  })
+  return user?.role?.permissions?.some(p => 
+    p.module.code === 'GLOBAL_ACCESS' && (p.canUpdate || p.canRead)
+  ) || false
+}
+
+/**
  * 2. Verifica la matriz de permisos de la base de datos (Rol vs Módulo).
  * Ejemplo de uso en un endpoint: await requirePermission(event, 'PRODUCTS', 'create')
  */
@@ -112,6 +125,53 @@ export async function requirePermission(
 
   if (!hasAccess) {
     throw new ForbiddenError(`No tienes permiso para '${action}' en el módulo ${moduleCode}`)
+  }
+
+  return userId
+}
+
+/**
+ * 3. Verifica si el usuario posee al menos UNO de los permisos solicitados.
+ */
+export async function requireAnyPermission(
+  event: H3Event,
+  moduleCodes: string[],
+  action: 'create' | 'read' | 'update' | 'delete' = 'read'
+) {
+  const userId = await requireAuth(event)
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      role: {
+        include: {
+          permissions: {
+            include: { module: true }
+          }
+        }
+      }
+    }
+  })
+
+  if (!user || !user.role) {
+    throw new ForbiddenError('El usuario no tiene un rol asignado')
+  }
+
+  const hasGlobalAccess = user.role.permissions.some(p => p.module.code === 'GLOBAL_ACCESS' && p.canRead)
+  if (hasGlobalAccess) {
+    return userId
+  }
+
+  const hasAccess = user.role.permissions.some(p => {
+    if (!moduleCodes.includes(p.module.code)) return false
+    if (action === 'create') return p.canCreate
+    if (action === 'read') return p.canRead
+    if (action === 'update') return p.canUpdate
+    if (action === 'delete') return p.canDelete
+    return false
+  })
+
+  if (!hasAccess) {
+    throw new ForbiddenError(`No tienes permiso para acceder a esta función (${moduleCodes.join(', ')})`)
   }
 
   return userId
