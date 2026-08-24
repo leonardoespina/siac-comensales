@@ -1,4 +1,5 @@
 import { defineApiHandler } from '../../utils/handler'
+import { requireAnyPermission } from '../../utils/auth'
 import { prisma } from '../../utils/prisma'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc.js'
@@ -9,6 +10,7 @@ dayjs.extend(timezone)
 
 export default defineApiHandler(async (event) => {
   const query = getQuery(event)
+  await requireAnyPermission(event, ['DISPATCH_HISTORY', 'DISPATCH', 'ASSISTED_DISPATCH', 'DINERS_REQUESTS', 'DINERS', 'MASSIVE_DISPATCH'], 'read')
   const diningRoomId = query.diningRoomId ? parseInt(query.diningRoomId as string) : undefined
   const dateParam = query.date as string
 

@@ -1,10 +1,11 @@
 import { defineApiHandler } from '../../../utils/handler'
-import { requireUserContext } from '../../../utils/auth'
+import { requireUserContext, requirePermission } from '../../../utils/auth'
 import * as massiveService from '../../../services/massiveService'
 import dayjs from 'dayjs'
 
 export default defineApiHandler(async (event) => {
   const query = getQuery(event)
+  await requirePermission(event, 'MASSIVE_DISPATCH', 'read')
   const user = await requireUserContext(event)
 
   const diningRoomId = query.diningRoomId ? Number(query.diningRoomId) : (user.diningRoomId ? user.diningRoomId : undefined)

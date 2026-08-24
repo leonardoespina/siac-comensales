@@ -1,11 +1,12 @@
 import { defineApiHandler } from '../../../utils/handler'
-import { requireUserContext } from '../../../utils/auth'
+import { requireUserContext, requirePermission } from '../../../utils/auth'
 import * as massiveService from '../../../services/massiveService'
 import { DomainError } from '../../../domain/errors'
 
 export default defineApiHandler(async (event) => {
   const body = await readBody(event)
   const { batchId, scannedCedula } = body
+  await requirePermission(event, 'MASSIVE_DISPATCH', 'create')
   const user = await requireUserContext(event) // El Operador que despacha
 
   if (!batchId || !scannedCedula) {

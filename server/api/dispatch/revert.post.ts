@@ -1,9 +1,11 @@
 import { defineApiHandler } from '../../utils/handler'
+import { requirePermission } from '../../utils/auth'
 import { prisma } from '../../utils/prisma'
 import { DomainError } from '../../domain/errors'
 
 export default defineApiHandler(async (event) => {
   const body = await readBody(event)
+  const userId = await requirePermission(event, 'DISPATCH', 'delete')
   const { detailId } = body
   const user = event.context.user
 

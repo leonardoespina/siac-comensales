@@ -1,8 +1,9 @@
 import { defineApiHandler } from '../../utils/handler'
 import { prisma } from '../../utils/prisma'
-import { requireUserContext, hasGlobalAccess } from '../../utils/auth'
+import { requireUserContext, hasGlobalAccess, requirePermission } from '../../utils/auth'
 
 export default defineApiHandler(async (event) => {
+  await requirePermission(event, 'DINING_ROOMS', 'read')
   const user = await requireUserContext(event)
   const query = getQuery(event)
   let warehouseId = query.warehouseId ? parseInt(query.warehouseId as string) : undefined

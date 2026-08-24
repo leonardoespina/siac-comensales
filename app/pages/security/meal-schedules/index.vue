@@ -16,18 +16,6 @@
         </q-td>
       </template>
 
-      <!-- Aquí formateamos la vista a AM/PM según solicitó el usuario -->
-      <template v-slot:body-cell-startTime="props">
-        <q-td :props="props" align="center">
-          {{ formatAmPm(props.row.startTime) }}
-        </q-td>
-      </template>
-
-      <template v-slot:body-cell-endTime="props">
-        <q-td :props="props" align="center">
-          {{ formatAmPm(props.row.endTime) }}
-        </q-td>
-      </template>
 
       <template v-slot:body-cell-status="props">
         <q-td :props="props">
@@ -104,21 +92,21 @@ const filter = ref('')
 
 const columns = [
   { name: 'shiftType', label: 'Turno', field: 'shiftType', align: 'left', sortable: true },
-  { name: 'startTime', label: 'Hora de Inicio', field: 'startTime', align: 'center' },
-  { name: 'endTime', label: 'Hora de Cierre', field: 'endTime', align: 'center' },
-  { name: 'status', label: 'Estado', field: 'active', align: 'center', sortable: true },
-  { name: 'actions', label: 'Acciones', align: 'right' }
+  { name: 'startTime', label: 'Hora de Inicio', field: 'startTime', align: 'center', format: (val: string) => formatAmPm(val) },
+  { name: 'endTime',   label: 'Hora de Cierre', field: 'endTime',   align: 'center', format: (val: string) => formatAmPm(val) },
+  { name: 'status',   label: 'Estado',          field: 'active',    align: 'center', sortable: true },
+  { name: 'actions',  label: 'Acciones',                            align: 'right' }
 ]
 
-// Utilidad para transformar "14:30" a "02:30 PM" para visualización (Requerimiento del usuario)
+// Utilidad para transformar "14:30" a "02:30 PM" para visualización
 function formatAmPm(timeString: string | undefined): string {
   if (!timeString) return '--:--'
   const [hStr, mStr] = timeString.split(':')
   let hours = parseInt(hStr, 10)
   const ampm = hours >= 12 ? 'PM' : 'AM'
   hours = hours % 12
-  hours = hours ? hours : 12 // la hora '0' se muestra como '12'
-  const finalHour = hours < 10 ? `0${hours}` : hours
+  hours = hours ? hours : 12
+  const finalHour = String(hours).padStart(2, '0')
   return `${finalHour}:${mStr} ${ampm}`
 }
 

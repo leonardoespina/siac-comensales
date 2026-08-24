@@ -1,9 +1,9 @@
 import { defineApiHandler } from '../../utils/handler'
-import { requirePermission, requireUserContext } from '../../utils/auth'
+import { requireAnyPermission, requireUserContext } from '../../utils/auth'
 import * as dinerRepo from '../../repository/dinerRepository'
 
 export default defineApiHandler(async (event) => {
-  await requirePermission(event, 'DINERS', 'read')
+  await requireAnyPermission(event, ['DINERS', 'MY_SQUADS'], 'read')
   const user = await requireUserContext(event)
   
   // 1. Aislamiento Cero Confianza (Tenant Isolation)

@@ -1,10 +1,11 @@
 import { defineApiHandler } from '../../utils/handler'
 import { prisma } from '../../utils/prisma'
-import { requireUserContext, hasGlobalAccess } from '../../utils/auth'
+import { requireUserContext, hasGlobalAccess, requirePermission } from '../../utils/auth'
 import { ValidationError } from '../../domain/errors'
 import { emitEvent } from '../../utils/eventBus'
 
 export default defineApiHandler(async (event) => {
+  await requirePermission(event, 'DINING_ROOMS', 'create')
   const user = await requireUserContext(event)
   const body = await readBody(event)
   
