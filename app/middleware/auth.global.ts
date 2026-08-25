@@ -51,7 +51,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
       '/diners/dispatch': 'DISPATCH',
       '/diners/assisted': 'DISPATCH',
       '/diners/requests': 'DINERS_REQUESTS',
-      '/extraordinary': 'EXTRAORDINARY_DISPATCH'
+      '/extraordinary': 'EXTRAORDINARY'
     }
 
     // Buscamos si la ruta actual requiere algún módulo

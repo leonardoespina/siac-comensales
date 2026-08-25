@@ -32,6 +32,7 @@ async function main() {
     { code: 'ASSISTED_DISPATCH', name: 'Despacho Asistido' },
     { code: 'DISPATCH_HISTORY', name: 'Historial de Despachos' },
     { code: 'MASSIVE_DISPATCH', name: 'Despacho Masivo (Viandas)' },
+    { code: 'EXTRAORDINARY', name: 'Visitas y Extraordinarios' },
     { code: 'GLOBAL_ACCESS', name: 'Acceso Global sin Restricciones' }
   ]
 
