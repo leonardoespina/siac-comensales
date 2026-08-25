@@ -47,7 +47,11 @@ export default defineNuxtRouteMiddleware(async (to) => {
       '/diners/workers': 'DINERS',
       '/diners/dining-rooms': 'DINING_ROOMS',
       '/diners/dependencies': 'DEPENDENCIES',
-      '/diners/positions': 'POSITIONS'
+      '/diners/positions': 'POSITIONS',
+      '/diners/dispatch': 'DISPATCH',
+      '/diners/assisted': 'DISPATCH',
+      '/diners/requests': 'DINERS_REQUESTS',
+      '/extraordinary': 'EXTRAORDINARY_DISPATCH'
     }
 
     // Buscamos si la ruta actual requiere algún módulo
