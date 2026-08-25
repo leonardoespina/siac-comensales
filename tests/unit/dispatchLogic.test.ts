@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import dayjs from 'dayjs'
-import utc from 'dayjs/plugin/utc'
-import timezone from 'dayjs/plugin/timezone'
-import isSameOrAfter from 'dayjs/plugin/isSameOrAfter'
-import isSameOrBefore from 'dayjs/plugin/isSameOrBefore'
+import utc from 'dayjs/plugin/utc.js'
+import timezone from 'dayjs/plugin/timezone.js'
+import isSameOrAfter from 'dayjs/plugin/isSameOrAfter.js'
+import isSameOrBefore from 'dayjs/plugin/isSameOrBefore.js'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)

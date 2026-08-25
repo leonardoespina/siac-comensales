@@ -3,10 +3,10 @@ import { requirePermission } from '../../utils/auth'
 import { prisma } from '../../utils/prisma'
 import { DomainError } from '../../domain/errors'
 import dayjs from 'dayjs'
-import utc from 'dayjs/plugin/utc'
-import timezone from 'dayjs/plugin/timezone'
-import isBetween from 'dayjs/plugin/isBetween'
-import customParseFormat from 'dayjs/plugin/customParseFormat'
+import utc from 'dayjs/plugin/utc.js'
+import timezone from 'dayjs/plugin/timezone.js'
+import isBetween from 'dayjs/plugin/isBetween.js'
+import customParseFormat from 'dayjs/plugin/customParseFormat.js'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
