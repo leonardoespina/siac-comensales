@@ -76,7 +76,7 @@ export function useWorkerForm() {
       return
     }
     
-    if (!formData.value.siteId) {
+    if (formData.value.siteId === null || formData.value.siteId === undefined) {
       $q.notify({ type: 'warning', message: 'Seleccione la sede base' })
       return
     }

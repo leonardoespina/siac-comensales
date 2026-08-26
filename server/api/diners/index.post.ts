@@ -12,10 +12,11 @@ export default defineApiHandler(async (event) => {
   const body = await readBody(event)
 
   const squadId = Number(body.squadId)
-  const siteId = Number(body.siteId)
+  const hasSiteId = body.siteId !== undefined && body.siteId !== null && body.siteId !== ''
+  const siteId = hasSiteId ? Number(body.siteId) : NaN
 
-  if (!squadId || !body.cedula || !body.name || !siteId) {
-    throw new ValidationError('Cédula, nombre, cuadrilla y comedor son obligatorios.')
+  if (!squadId || !body.cedula || !body.name || isNaN(siteId)) {
+    throw new ValidationError('Cédula, nombre, cuadrilla y sede base son obligatorios.')
   }
 
   // Sanitizar cédula (Remover letras, guiones, espacios. Conservar solo números)

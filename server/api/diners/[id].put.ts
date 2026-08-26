@@ -20,8 +20,9 @@ export default defineApiHandler(async (event) => {
     throw new ValidationError('ID de comensal inválido')
   }
 
-  const siteId = Number(body.siteId)
-  if (body.siteId && isNaN(siteId)) {
+  const hasSiteId = body.siteId !== undefined && body.siteId !== null && body.siteId !== ''
+  const siteId = hasSiteId ? Number(body.siteId) : undefined
+  if (hasSiteId && isNaN(siteId!)) {
     throw new ValidationError('La sede no es válida')
   }
 
@@ -80,7 +81,7 @@ export default defineApiHandler(async (event) => {
     rationType: body.rationType,
     squadId: body.squadId ? Number(body.squadId) : undefined,
     subdependencyId: finalSubdependencyId,
-    siteId: siteId || undefined,
+    siteId: hasSiteId ? siteId : undefined,
     positionId: body.positionId ? Number(body.positionId) : undefined
   })
 
