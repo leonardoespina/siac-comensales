@@ -250,20 +250,22 @@ export function useDinerRequestForm() {
   }
 
   function refreshGrid() {
-    const newSubd = filters.value.subdependencyId
-    const newSquad = filters.value.squadId
+    const targetDep = filters.value.dependencyId
+    const targetSubd = filters.value.subdependencyId
+    const targetSquad = filters.value.squadId
   
-    if (!newSubd && !newSquad) {
+    // Si no hay Dependencia seleccionada y tampoco subdependencia ni cuadrilla, vaciamos
+    if (!targetDep && !targetSubd && !targetSquad) {
       loadedDiners.value = []
       return
     }
   
     let filtered = dinersStore.diners
-    if (newSubd) {
-      filtered = filtered.filter(d => d.subdependencyId === newSubd)
+    if (targetSubd) {
+      filtered = filtered.filter(d => d.subdependencyId === targetSubd)
     }
-    if (newSquad) {
-      filtered = filtered.filter(d => d.squadId === newSquad)
+    if (targetSquad) {
+      filtered = filtered.filter(d => d.squadId === targetSquad)
     }
   
     loadedDiners.value = [...filtered]
@@ -311,13 +313,16 @@ export function useDinerRequestForm() {
     resetMasterChecks()
   }
 
-  function openCreate() {
+  async function openCreate() {
     clearForm()
     isViewMode.value = false
     isEditMode.value = false
     currentBatchCode.value = null
     isOpen.value = true
-    refreshGrid() // Petición previa del usuario
+    if (filters.value.dependencyId) {
+      await dinersStore.fetchAll({ dependencyId: filters.value.dependencyId })
+    }
+    refreshGrid()
   }
 
   function loadExistingData(dateGroup: any, editMode: boolean = false) {
