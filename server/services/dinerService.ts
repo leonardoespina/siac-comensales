@@ -207,7 +207,7 @@ export async function importDinersFromExcel(rows: Array<any>, user: any) {
       const sId = siteMap.get(String(row.sedeName || row.comedorName).toUpperCase())
       const subId = areaMap.get(String(row.areaName).toUpperCase())
 
-      if (!sqId || !sId || !subId) continue // Salvaguarda
+      if (!sqId || sId === undefined || sId === null || !subId) continue // Salvaguarda
 
       const upsertedDiner = await tx.diner.upsert({
         where: { cedula: row.cedula },
