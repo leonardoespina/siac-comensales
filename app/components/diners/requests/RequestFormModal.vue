@@ -58,8 +58,8 @@
                       dense 
                       clearable 
                       bg-color="white"
-                      :disable="!!auth.user?.subdependencyId"
-                      :readonly="!!auth.user?.subdependencyId"
+                      :disable="!!auth.user?.subdependencyId && (!auth.user?.subdependencies || auth.user?.subdependencies.length <= 1)"
+                      :readonly="!!auth.user?.subdependencyId && (!auth.user?.subdependencies || auth.user?.subdependencies.length <= 1)"
                     />
                   </div>
                   

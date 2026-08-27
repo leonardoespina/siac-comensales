@@ -158,12 +158,26 @@ export function useDinerRequestForm() {
     return squadsStore.squads.filter(squad => activeSquadIds.has(squad.id))
   })
 
-  // Computado de subdependencias basado en la dependencia seleccionada (o la del usuario)
   const filteredSubdependencies = computed(() => {
     const targetDepId = filters.value.dependencyId || authStore.user?.dependencyId
     if (!targetDepId) return []
     const dep = dependenciesStore.dependencies.find(d => d.id === targetDepId)
-    return dep?.subdependencies || []
+    const allSubs = dep?.subdependencies || []
+    
+    // Si es SuperAdmin Global: ve todas las subdependencias
+    if (authStore.hasPermission('GLOBAL_ACCESS', 'canRead')) {
+      return allSubs
+    }
+
+    const userSubIds: number[] = authStore.user?.subdependencies?.map((s: any) => s.id) || (authStore.user?.subdependencyId ? [authStore.user.subdependencyId] : [])
+
+    // Si tiene subdependencias asignadas: filtra ÚNICAMENTE sus subdependencias autorizadas
+    if (userSubIds.length > 0) {
+      return allSubs.filter((s: any) => userSubIds.includes(s.id))
+    }
+
+    // Si es Gerente General (sin subdependencias asignadas): ve todas las de su gerencia
+    return allSubs
   })
 
   const isLoadingData = ref(false)
@@ -261,6 +275,13 @@ export function useDinerRequestForm() {
     }
   
     let filtered = dinersStore.diners
+
+    // Si el usuario no es global y tiene subdependencias asignadas, limitamos a sus subdependencias autorizadas
+    const userSubIds: number[] = authStore.user?.subdependencies?.map((s: any) => s.id) || (authStore.user?.subdependencyId ? [authStore.user.subdependencyId] : [])
+    if (!authStore.hasPermission('GLOBAL_ACCESS', 'canRead') && userSubIds.length > 0) {
+      filtered = filtered.filter(d => userSubIds.includes(d.subdependencyId))
+    }
+
     if (targetSubd) {
       filtered = filtered.filter(d => d.subdependencyId === targetSubd)
     }
@@ -290,8 +311,10 @@ export function useDinerRequestForm() {
   })
 
   function clearForm() {
+    const userSubIds: number[] = authStore.user?.subdependencies?.map((s: any) => s.id) || (authStore.user?.subdependencyId ? [authStore.user.subdependencyId] : [])
     filters.value.dependencyId = authStore.user?.dependencyId || null
-    filters.value.subdependencyId = authStore.user?.subdependencyId || null
+    // Si tiene exactamente 1 subdependencia la preseleccionamos; si tiene múltiples o es gerente, dejamos null
+    filters.value.subdependencyId = userSubIds.length === 1 ? userSubIds[0] : null
     filters.value.squadId = null
     filters.value.diningRoomId = null
     

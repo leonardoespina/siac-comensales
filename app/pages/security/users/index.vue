@@ -16,6 +16,25 @@
         </q-td>
       </template>
 
+      <template v-slot:body-cell-subdependencies="props">
+        <q-td :props="props" align="center">
+          <q-chip 
+            v-for="sub in (props.row.subdependencies || [])" 
+            :key="sub.id" 
+            color="primary" 
+            text-color="white" 
+            size="sm" 
+            dense 
+            outline
+          >
+            {{ sub.name }}
+          </q-chip>
+          <span v-if="!props.row.subdependencies || props.row.subdependencies.length === 0" class="text-caption text-grey">
+            {{ props.row.dependency ? props.row.dependency.name + ' (Todas)' : 'N/A' }}
+          </span>
+        </q-td>
+      </template>
+
       <template v-slot:body-cell-sites="props">
         <q-td :props="props" align="center">
           <q-chip 
@@ -32,7 +51,6 @@
           <span v-if="!props.row.sites || props.row.sites.length === 0" class="text-caption text-grey">Global</span>
         </q-td>
       </template>
-      
 
       <template v-slot:body-cell-status="props">
         <q-td :props="props">
@@ -106,7 +124,7 @@
             fill-input
             input-debounce="0"
             @filter="filterDependencies"
-            @update:model-value="form.subdependencyId = null"
+            @update:model-value="form.subdependencyIds = []"
           >
             <template v-slot:no-option>
               <q-item><q-item-section class="text-grey">Sin resultados</q-item-section></q-item>
@@ -115,21 +133,19 @@
         </div>
         <div class="col-12 col-md-6">
           <q-select 
-            v-model="form.subdependencyId" 
+            v-model="form.subdependencyIds" 
             :options="subdependencyOptions" 
             option-value="id"
             option-label="name"
             emit-value 
             map-options 
-            label="Subdependencia (Supervisores)" 
+            label="Subdependencias Autorizadas (Supervisores)" 
             outlined 
             dense
+            multiple
+            use-chips
             clearable
             :disable="!form.dependencyId"
-            use-input
-            hide-selected
-            fill-input
-            input-debounce="0"
             @filter="filterSubdependencies"
           >
             <template v-slot:no-option>
@@ -196,13 +212,17 @@ watch(isOpen, (val) => {
     subdependencyOptions.value = filteredSubdependencies.value
   }
 })
+
+watch(() => form.value.dependencyId, () => {
+  subdependencyOptions.value = filteredSubdependencies.value
+})
+
 const filterRoles = (val: string, update: Function) => {
   update(() => {
     const needle = val.toLowerCase()
     roleOptions.value = rolesStore.roles.filter(v => v.name.toLowerCase().indexOf(needle) > -1)
   })
 }
-
 
 const filterDependencies = (val: string, update: Function) => {
   update(() => {
@@ -216,6 +236,7 @@ const filteredSubdependencies = computed(() => {
   const dep = depStore.dependencies.find(d => d.id === form.value.dependencyId)
   return dep?.subdependencies || []
 })
+
 const filterSubdependencies = (val: string, update: Function) => {
   update(() => {
     const needle = val.toLowerCase()
@@ -227,8 +248,8 @@ const columns = [
   { name: 'cedula', label: 'Cédula', field: 'cedula', align: 'left', sortable: true },
   { name: 'name', label: 'Nombre', field: 'name', align: 'left', sortable: true },
   { name: 'role', label: 'Rol', field: 'role', align: 'center', sortable: true },
+  { name: 'subdependencies', label: 'Subdependencias Autorizadas', align: 'center' },
   { name: 'sites', label: 'Sedes Autorizadas', align: 'center' },
-
   { name: 'status', label: 'Estado', field: 'active', align: 'center', sortable: true },
   { name: 'actions', label: 'Acciones', align: 'right' }
 ]

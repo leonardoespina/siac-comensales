@@ -7,7 +7,7 @@ export default defineApiHandler(async (event) => {
   // 1. Validar el token y obtener el userId
   const userId = await requireAuth(event)
 
-  // 2. Traer al usuario completo con sus permisos
+  // 2. Traer al usuario completo con sus permisos, sedes y subdependencias
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: {
@@ -17,7 +17,10 @@ export default defineApiHandler(async (event) => {
             include: { module: true }
           }
         }
-      }
+      },
+      sites: true,
+      subdependencies: true,
+      dependency: true
     }
   })
 

@@ -17,29 +17,42 @@ export function useUserForm() {
     name: '',
     password: '',
     roleId: null as number | null,
-
     dependencyId: null as number | null,
-    subdependencyId: null as number | null,
+    subdependencyIds: [] as number[],
     siteIds: [] as number[],
     active: true
   })
 
   function openCreate() {
     isEditing.value = false
-    form.value = { id: 0, cedula: '', name: '', password: '', roleId: null, dependencyId: null, subdependencyId: null, siteIds: [], active: true }
+    form.value = {
+      id: 0,
+      cedula: '',
+      name: '',
+      password: '',
+      roleId: null,
+      dependencyId: null,
+      subdependencyIds: [],
+      siteIds: [],
+      active: true
+    }
     isOpen.value = true
   }
 
   function openEdit(user: any) {
     isEditing.value = true
     
-    // Find dependencyId if user has subdependencyId (for normal users)
-    // For Gerentes, user.dependencyId is already provided by the backend
+    // Extraer IDs de subdependencias (M:N o legacy subdependencyId)
+    const subdependencyIds: number[] = user.subdependencies?.length
+      ? user.subdependencies.map((s: any) => s.id)
+      : (user.subdependencyId ? [user.subdependencyId] : [])
+
+    // Buscar dependencyId si no viene explícito
     let depId = user.dependencyId || null
-    if (!depId && user.subdependencyId) {
+    if (!depId && subdependencyIds.length > 0) {
       const depStore = useDependenciesStore()
       for (const dep of depStore.dependencies) {
-        if (dep.subdependencies?.some((sub: any) => sub.id === user.subdependencyId)) {
+        if (dep.subdependencies?.some((sub: any) => subdependencyIds.includes(sub.id))) {
           depId = dep.id
           break
         }
@@ -47,7 +60,13 @@ export function useUserForm() {
     }
     
     const siteIds = user.sites?.map((s: any) => s.id) || []
-    form.value = { ...user, dependencyId: depId, siteIds, password: '' }
+    form.value = { 
+      ...user, 
+      dependencyId: depId, 
+      subdependencyIds, 
+      siteIds, 
+      password: '' 
+    }
     isOpen.value = true
   }
 

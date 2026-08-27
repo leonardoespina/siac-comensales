@@ -8,13 +8,25 @@ import type { Prisma } from '@prisma/client'
 
 export async function findUserById(id: number) {
   return prisma.user.findUnique({
-    where: { id }
+    where: { id },
+    include: {
+      role: { select: { id: true, name: true } },
+      sites: true,
+      subdependencies: true,
+      dependency: true
+    }
   })
 }
 
 export async function findUserByCedula(cedula: string) {
   return prisma.user.findUnique({
-    where: { cedula }
+    where: { cedula },
+    include: {
+      role: { select: { id: true, name: true } },
+      sites: true,
+      subdependencies: true,
+      dependency: true
+    }
   })
 }
 
@@ -29,13 +41,23 @@ export async function findUserWithAuth(cedula: string) {
           }
         }
       },
-      subdependency: {
+      subdependencies: {
         select: {
+          id: true,
           name: true,
           dependencyId: true,
-          dependency: { select: { name: true } }
+          dependency: { select: { id: true, name: true } }
         }
-      }
+      },
+      subdependency: {
+        select: {
+          id: true,
+          name: true,
+          dependencyId: true,
+          dependency: { select: { id: true, name: true } }
+        }
+      },
+      sites: true
     }
   })
 }
@@ -55,7 +77,8 @@ export async function createUser(data: Prisma.UserCreateInput) {
     data,
     include: { 
       role: { select: { id: true, name: true } }, 
-      sites: true 
+      sites: true,
+      subdependencies: true
     }
   })
 }
@@ -66,7 +89,8 @@ export async function updateUser(id: number, data: Prisma.UserUpdateInput) {
     data,
     include: { 
       role: { select: { id: true, name: true } }, 
-      sites: true 
+      sites: true,
+      subdependencies: true
     }
   })
 }

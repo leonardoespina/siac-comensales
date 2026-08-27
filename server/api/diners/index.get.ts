@@ -7,35 +7,31 @@ export default defineApiHandler(async (event) => {
   const user = await requireUserContext(event)
   
   // 1. Aislamiento Cero Confianza (Tenant Isolation)
-  // Si NO es Administrador Global, ignoramos cualquier petición maliciosa del Frontend
-  // y lo forzamos a buscar únicamente dentro de su árbol organizacional asignado.
   const isGlobal = user.isGlobal === true
-  
   const query = getQuery(event)
+  
   let targetSubdependency: number | undefined
   let targetDependency: number | undefined
+  let targetSubdependencies: number[] | undefined
+
+  const userSubIds: number[] = user.subdependencyIds || (user.subdependencyId ? [user.subdependencyId] : [])
 
   if (!isGlobal) {
-    // Modo Aislado: El usuario está amarrado a su Gerencia/Subgerencia.
-    // Solo puede buscar subdependencias si éstas pertenecen a su Gerencia (esto requeriría 
-    // validación extra, por simplicidad de seguridad estricta usamos su scope directo).
-    
-    // Si el gerente tiene una subdependencia específica asignada, la forzamos.
-    if (user.subdependencyId) {
-      targetSubdependency = user.subdependencyId
-    } 
-    // Si no tiene subdependencia, pero tiene dependencia (es Gerente General de área), la forzamos.
-    else if (user.dependencyId) {
-      targetDependency = user.dependencyId
-      
-      // Permitimos que un Gerente General filtre por una subdependencia específica SOLO si lo solicita
-      // (En producción real habría que validar que esa query.subdependencyId pertenezca a user.dependencyId)
-      if (query.subdependencyId) {
-        targetSubdependency = Number(query.subdependencyId)
+    // Si el usuario envió un filtro de subdependencia específico en la query:
+    if (query.subdependencyId) {
+      const reqSubId = Number(query.subdependencyId)
+      // Validamos que pertenezca a sus subdependencias autorizadas o a su gerencia
+      if (userSubIds.includes(reqSubId) || user.dependencyId) {
+        targetSubdependency = reqSubId
       }
-    }
-    // Si no tiene ninguna, bloqueamos el acceso.
-    else {
+    } else if (userSubIds.length > 1) {
+      // Supervisor multi-área sin filtro específico: trae todos sus comensales autorizados
+      targetSubdependencies = userSubIds
+    } else if (userSubIds.length === 1) {
+      targetSubdependency = userSubIds[0]
+    } else if (user.dependencyId) {
+      targetDependency = user.dependencyId
+    } else {
       return []
     }
   } else {
@@ -50,11 +46,15 @@ export default defineApiHandler(async (event) => {
   if (targetSubdependency) {
     return await dinerRepo.getDinersBySubdependency(targetSubdependency, undefined, isGlobal, allowedSiteIds)
   }
+
+  if (targetSubdependencies && targetSubdependencies.length > 0) {
+    return await dinerRepo.getDinersBySubdependencies(targetSubdependencies, isGlobal, allowedSiteIds)
+  }
   
   if (targetDependency) {
     return await dinerRepo.getDinersByDependency(targetDependency, isGlobal, allowedSiteIds)
   }
 
-  // Si no hay filtros válidos (ej. un admin global que entra por primera vez sin filtrar), devolvemos vacío
+  // Si no hay filtros válidos, devolvemos vacío
   return []
 })

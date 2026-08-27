@@ -30,6 +30,24 @@ export async function getDinersBySubdependency(subdependencyId: number, squadId?
   })
 }
 
+export async function getDinersBySubdependencies(subdependencyIds: number[], includeInactive: boolean = false, allowedSiteIds?: number[]) {
+  return prisma.diner.findMany({
+    where: { 
+      subdependencyId: { in: subdependencyIds },
+      ...(includeInactive ? {} : { active: true }),
+      ...(allowedSiteIds && allowedSiteIds.length > 0 ? { siteId: { in: allowedSiteIds } } : {})
+    },
+    include: {
+      squad: true,
+      subdependency: true,
+      position: true,
+      site: true,
+      biometricRecord: true
+    },
+    orderBy: { id: 'desc' }
+  })
+}
+
 export async function getDinersByDependency(dependencyId: number, includeInactive: boolean = false, allowedSiteIds?: number[]) {
   return prisma.diner.findMany({
     where: { 

@@ -19,6 +19,10 @@ export async function registerUser(body: any, adminId: number) {
   // Asignar contraseña estándar: 123456
   const passwordHash = await bcrypt.hash('123456', 10)
 
+  const subdependencyIds: number[] = Array.isArray(body.subdependencyIds)
+    ? body.subdependencyIds.map((id: any) => Number(id)).filter((id: number) => !isNaN(id))
+    : (body.subdependencyId ? [Number(body.subdependencyId)] : [])
+
   const newUser = await userRepo.createUser({
     cedula: body.cedula,
     name: body.name,
@@ -29,7 +33,10 @@ export async function registerUser(body: any, adminId: number) {
       connect: body.siteIds.map((id: number) => ({ id: Number(id) }))
     } : undefined,
     dependency: body.dependencyId ? { connect: { id: parseInt(body.dependencyId) } } : undefined,
-    subdependency: body.subdependencyId ? { connect: { id: parseInt(body.subdependencyId) } } : undefined
+    subdependencies: subdependencyIds.length ? {
+      connect: subdependencyIds.map((id: number) => ({ id }))
+    } : undefined,
+    subdependency: subdependencyIds.length ? { connect: { id: subdependencyIds[0] } } : undefined
   })
 
   await logAudit(adminId, 'CREATE', 'USER', newUser.id, `Usuario creado: ${newUser.cedula}`)
@@ -52,6 +59,11 @@ export async function modifyUser(id: number, body: any, adminId: number) {
     passwordHash = await bcrypt.hash(body.password, 10)
   }
 
+  const hasSubdependencies = body.subdependencyIds !== undefined || body.subdependencyId !== undefined
+  const subdependencyIds: number[] = Array.isArray(body.subdependencyIds)
+    ? body.subdependencyIds.map((subId: any) => Number(subId)).filter((subId: number) => !isNaN(subId))
+    : (body.subdependencyId ? [Number(body.subdependencyId)] : [])
+
   const updatedUser = await userRepo.updateUser(id, {
     cedula: body.cedula,
     name: body.name,
@@ -64,8 +76,11 @@ export async function modifyUser(id: number, body: any, adminId: number) {
     ...(body.dependencyId !== undefined && {
       dependency: body.dependencyId ? { connect: { id: parseInt(body.dependencyId) } } : { disconnect: true }
     }),
-    ...(body.subdependencyId !== undefined && {
-      subdependency: body.subdependencyId ? { connect: { id: parseInt(body.subdependencyId) } } : { disconnect: true }
+    ...(hasSubdependencies && {
+      subdependencies: {
+        set: subdependencyIds.map((subId: number) => ({ id: subId }))
+      },
+      subdependency: subdependencyIds.length ? { connect: { id: subdependencyIds[0] } } : { disconnect: true }
     })
   })
 

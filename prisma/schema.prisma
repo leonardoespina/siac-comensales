@@ -107,6 +107,9 @@ model User {
   dependencyId Int?        @map("dependency_id")
   dependency   Dependency? @relation(fields: [dependencyId], references: [id], onDelete: Restrict)
 
+  // Aislamiento Multi-Subdependencia M:N (Soporte Multi-División)
+  subdependencies Subdependency[] @relation("UserSubdependencies")
+
   // Aislamiento por Subdependencia (Para Solicitantes/Aprobadores de Comensales)
   subdependencyId Int?           @map("subdependency_id")
   subdependency   Subdependency? @relation(fields: [subdependencyId], references: [id], onDelete: Restrict)
@@ -228,8 +231,9 @@ model Subdependency {
   dependencyId       Int        @map("dependency_id")
   dependency         Dependency @relation(fields: [dependencyId], references: [id], onDelete: Restrict)
 
-  users  User[]
-  diners Diner[]
+  users           User[]
+  authorizedUsers User[] @relation("UserSubdependencies")
+  diners          Diner[]
   targetRequests DinerRequest[]
   extraordinaryDispatches ExtraordinaryDispatch[]
 

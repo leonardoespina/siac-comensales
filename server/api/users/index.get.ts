@@ -8,7 +8,9 @@ export default defineApiHandler(async (event) => {
   const users = await prisma.user.findMany({
     include: {
       role: { select: { id: true, name: true } },
-      sites: true
+      sites: true,
+      subdependencies: true,
+      dependency: true
     },
     orderBy: { createdAt: 'desc' }
   })

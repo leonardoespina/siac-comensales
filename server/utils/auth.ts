@@ -68,24 +68,33 @@ export async function requireUserContext(event: H3Event) {
   const userId = await requireAuth(event)
   const user = (event.context.userRecord as any) || await prisma.user.findUnique({
     where: { id: userId },
-    include: { role: { include: { permissions: { include: { module: true } } } }, sites: true }
+    include: { 
+      role: { include: { permissions: { include: { module: true } } } }, 
+      sites: true,
+      subdependencies: true
+    }
   })
   if (!user) throw new UnauthorizedError('Usuario no encontrado')
 
-  // Obtener sites si no venían precargados
-  const userWithSites = user.sites ? user : await prisma.user.findUnique({
+  // Obtener sites/subdependencies si no venían precargados
+  const fullUser = (user.sites && user.subdependencies) ? user : await prisma.user.findUnique({
     where: { id: userId },
-    include: { sites: true }
+    include: { sites: true, subdependencies: true }
   })
+
+  const subdependencyIds: number[] = fullUser?.subdependencies?.length > 0
+    ? fullUser.subdependencies.map((s: any) => s.id)
+    : (user.subdependencyId ? [user.subdependencyId] : [])
 
   return {
     id: user.id,
     roleName: user.role?.name,
     isGlobal: user.role?.permissions?.some((p: any) => p.module.code === 'GLOBAL_ACCESS' && p.canRead) || false,
     warehouseId: user.warehouseId,
-    siteIds: userWithSites?.sites?.map((s: any) => s.id) || [],
+    siteIds: fullUser?.sites?.map((s: any) => s.id) || [],
     dependencyId: user.dependencyId,
-    subdependencyId: user.subdependencyId
+    subdependencyId: subdependencyIds[0] || user.subdependencyId || null,
+    subdependencyIds
   }
 }
 
