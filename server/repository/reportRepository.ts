@@ -14,6 +14,7 @@ export interface MasterReportFilters {
 export interface SecurityContext {
   dependencyId?: number | null
   subdependencyId?: number | null
+  subdependencyIds?: number[] | null
 }
 
 export async function getConsolidatedReport(filters: MasterReportFilters, security: SecurityContext) {
@@ -28,7 +29,7 @@ export async function getConsolidatedReport(filters: MasterReportFilters, securi
   }
 
   // Si hay RLS o filtros de dependencia, inicializamos diner.subdependency
-  if (filters.dependencyId || filters.subdependencyId || security.dependencyId || security.subdependencyId) {
+  if (filters.dependencyId || filters.subdependencyId || security.dependencyId || security.subdependencyId || (security.subdependencyIds && security.subdependencyIds.length > 0)) {
     whereClause.diner = { subdependency: {} }
   }
 
@@ -61,7 +62,9 @@ export async function getConsolidatedReport(filters: MasterReportFilters, securi
   }
 
   // RLS (Security Context overrides filters if set)
-  if (security.subdependencyId) {
+  if (security.subdependencyIds && security.subdependencyIds.length > 0) {
+    whereClause.diner.subdependencyId = { in: security.subdependencyIds }
+  } else if (security.subdependencyId) {
     whereClause.diner.subdependencyId = security.subdependencyId
   } else if (security.dependencyId) {
     whereClause.diner.subdependency.dependencyId = security.dependencyId
@@ -121,7 +124,9 @@ export async function getApprovedExtraordinaryForReport(filters: MasterReportFil
   const effectiveSubdepId = security.subdependencyId || filters.subdependencyId
   const effectiveDepId = security.dependencyId || filters.dependencyId
 
-  if (effectiveSubdepId) {
+  if (security.subdependencyIds && security.subdependencyIds.length > 0) {
+    whereClause.subdependencyId = { in: security.subdependencyIds }
+  } else if (effectiveSubdepId) {
     whereClause.subdependencyId = effectiveSubdepId
   } else if (effectiveDepId) {
     whereClause.OR = [

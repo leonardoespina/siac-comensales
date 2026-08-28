@@ -23,9 +23,11 @@ export async function generateMasterReport(filters: any, user: any) {
   }
 
   // Security Context (Row-Level Security)
+  const userSubIds: number[] = user.subdependencyIds || (user.subdependencyId ? [user.subdependencyId] : [])
   const security: reportRepo.SecurityContext = {
     dependencyId: user.isGlobal ? null : user.dependencyId,
-    subdependencyId: user.isGlobal ? null : user.subdependencyId
+    subdependencyId: user.isGlobal ? null : (userSubIds.length === 1 ? userSubIds[0] : null),
+    subdependencyIds: user.isGlobal ? null : (userSubIds.length > 0 ? userSubIds : null)
   }
 
   // Retrieve raw data in parallel
@@ -113,9 +115,11 @@ export async function generateSummaryReport(filters: any, user: any) {
     status: filters.status || undefined
   }
 
+  const userSubIds: number[] = user.subdependencyIds || (user.subdependencyId ? [user.subdependencyId] : [])
   const security: reportRepo.SecurityContext = {
     dependencyId: user.isGlobal ? null : user.dependencyId,
-    subdependencyId: user.isGlobal ? null : user.subdependencyId
+    subdependencyId: user.isGlobal ? null : (userSubIds.length === 1 ? userSubIds[0] : null),
+    subdependencyIds: user.isGlobal ? null : (userSubIds.length > 0 ? userSubIds : null)
   }
 
   const isExtraordinaryExcluded = filters.status === 'APPROVED'
