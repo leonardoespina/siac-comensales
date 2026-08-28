@@ -16,10 +16,9 @@ export default defineApiHandler(async (event) => {
     throw new Error('Debe proveer startDate y endDate')
   }
 
-  // Si el usuario tiene una dependencia asignada (ej. Administrador de Comensales de una Gerencia),
-  // solo debe ver las solicitudes de su gerencia. Si es null (Global), ve todo.
+  const userSubIds: number[] = user.subdependencyIds || (user.subdependencyId ? [user.subdependencyId] : [])
   const filterByDependencyId = user.dependencyId ? user.dependencyId : null
-  const filterBySubdependencyId = user.subdependencyId ? user.subdependencyId : null
+  const filterBySubdependencyIds = userSubIds.length > 0 ? userSubIds : null
 
   // Evaluamos si el usuario es un Administrador Global (NIVEL 1) para mostrarle las solicitudes eliminadas
   const userWithRoles = await prisma.user.findUnique({
@@ -32,5 +31,5 @@ export default defineApiHandler(async (event) => {
     p.module.code === 'GLOBAL_ACCESS'
   ) || false)
 
-  return dinerRequestService.getRequestsByDateRange(startDate, endDate, filterByDependencyId, filterBySubdependencyId, isGodMode)
+  return dinerRequestService.getRequestsByDateRange(startDate, endDate, filterByDependencyId, filterBySubdependencyIds, isGodMode)
 })

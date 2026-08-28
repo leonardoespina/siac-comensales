@@ -87,10 +87,10 @@ export const dinerRequestService = {
     return true
   },
 
-  async getRequestsByDateRange(startDateStr: string, endDateStr: string, dependencyId?: number | null, subdependencyId?: number | null, isAdmin: boolean = false) {
+  async getRequestsByDateRange(startDateStr: string, endDateStr: string, dependencyId?: number | null, subdependencyIds?: number[] | number | null, isAdmin: boolean = false) {
     const start = new Date(`${startDateStr}T00:00:00.000Z`)
     const end = new Date(`${endDateStr}T00:00:00.000Z`)
-    return dinerRequestRepository.findAllByDateRange(start, end, dependencyId, subdependencyId, isAdmin)
+    return dinerRequestRepository.findAllByDateRange(start, end, dependencyId, subdependencyIds, isAdmin)
   },
 
   async createRequests(data: { 
@@ -167,10 +167,13 @@ export const dinerRequestService = {
   },
 
   async deleteRequest(id: number, targetDate: Date, hasGlobalBypass: boolean, userContext?: any) {
-    if (userContext && !userContext.isGlobal && userContext.subdependencyId) {
-      const request = await dinerRequestRepository.findById(id)
-      if (request && request.targetSubdependencyId && request.targetSubdependencyId !== userContext.subdependencyId) {
-        throw new DomainError('No tienes permisos para eliminar solicitudes de otra subdependencia.', 'FORBIDDEN', 403)
+    if (userContext && !userContext.isGlobal) {
+      const userSubs: number[] = userContext.subdependencyIds || (userContext.subdependencyId ? [userContext.subdependencyId] : [])
+      if (userSubs.length > 0) {
+        const request = await dinerRequestRepository.findById(id)
+        if (request && request.targetSubdependencyId && !userSubs.includes(request.targetSubdependencyId)) {
+          throw new DomainError('No tienes permisos para eliminar solicitudes de otra subdependencia.', 'FORBIDDEN', 403)
+        }
       }
     }
 
@@ -183,12 +186,18 @@ export const dinerRequestService = {
     const requests = await dinerRequestRepository.findManyByIds(ids)
     if (requests.length === 0) return { count: 0 }
 
-    for (const req of requests) {
-      if (userContext && !userContext.isGlobal && userContext.subdependencyId) {
-        if (req.targetSubdependencyId && req.targetSubdependencyId !== userContext.subdependencyId) {
-          throw new DomainError('No tienes permisos para eliminar solicitudes de otra subdependencia.', 'FORBIDDEN', 403)
+    if (userContext && !userContext.isGlobal) {
+      const userSubs: number[] = userContext.subdependencyIds || (userContext.subdependencyId ? [userContext.subdependencyId] : [])
+      if (userSubs.length > 0) {
+        for (const req of requests) {
+          if (req.targetSubdependencyId && !userSubs.includes(req.targetSubdependencyId)) {
+            throw new DomainError('No tienes permisos para eliminar solicitudes de otra subdependencia.', 'FORBIDDEN', 403)
+          }
         }
       }
+    }
+
+    for (const req of requests) {
       const dateStr = req.date.toISOString().split('T')[0]
       await this.validateTimeRule(dateStr, 'DELETE', hasGlobalBypass)
     }
@@ -225,11 +234,14 @@ export const dinerRequestService = {
       throw createError({ statusCode: 404, statusMessage: 'No se encontraron solicitudes válidas para actualizar.' })
     }
 
-    // Aislamiento por Subdependencia: Si no es admin global, validar que la solicitud pertenezca a su subdependencia
-    if (userContext && !userContext.isGlobal && userContext.subdependencyId) {
-      for (const req of requestsToUpdate) {
-        if (req.targetSubdependencyId && req.targetSubdependencyId !== userContext.subdependencyId) {
-          throw new DomainError('No tienes permisos para modificar solicitudes pertenecientes a otra subdependencia.', 'FORBIDDEN', 403)
+    // Aislamiento por Subdependencia: Si no es admin global, validar que la solicitud pertenezca a sus subdependencias autorizadas
+    if (userContext && !userContext.isGlobal) {
+      const userSubs: number[] = userContext.subdependencyIds || (userContext.subdependencyId ? [userContext.subdependencyId] : [])
+      if (userSubs.length > 0) {
+        for (const req of requestsToUpdate) {
+          if (req.targetSubdependencyId && !userSubs.includes(req.targetSubdependencyId)) {
+            throw new DomainError('No tienes permisos para modificar solicitudes pertenecientes a otra subdependencia.', 'FORBIDDEN', 403)
+          }
         }
       }
     }

@@ -3,7 +3,11 @@ import type { DinerRequest, DinerRequestDetail } from '@prisma/client'
 
 export const dinerRequestRepository = {
   
-  async findAllByDateRange(startDate: Date, endDate: Date, filterDependencyId?: number | null, filterSubdependencyId?: number | null, includeDeleted: boolean = false) {
+  async findAllByDateRange(startDate: Date, endDate: Date, filterDependencyId?: number | null, filterSubdependencyIds?: number[] | number | null, includeDeleted: boolean = false) {
+    const subIds = Array.isArray(filterSubdependencyIds) 
+      ? filterSubdependencyIds 
+      : (filterSubdependencyIds ? [filterSubdependencyIds] : [])
+
     return prisma.dinerRequest.findMany({
       where: {
         date: {
@@ -11,11 +15,11 @@ export const dinerRequestRepository = {
           lte: endDate
         },
         ...(includeDeleted ? {} : { deletedAt: null }),
-        ...(filterSubdependencyId ? {
+        ...(subIds.length > 0 ? {
           details: {
             some: {
               diner: {
-                subdependencyId: filterSubdependencyId
+                subdependencyId: { in: subIds }
               }
             }
           }
