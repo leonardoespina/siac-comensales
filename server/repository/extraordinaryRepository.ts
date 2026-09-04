@@ -31,7 +31,18 @@ export async function createExtraordinaryDispatch(data: any) {
   })
 }
 
-export async function getExtraordinaryDispatches(dateStr: string, diningRoomId?: number) {
+export async function findExtraordinaryById(id: number) {
+  return await prisma.extraordinaryDispatch.findUnique({
+    where: { id },
+    include: {
+      diningRoom: true,
+      dependency: true,
+      subdependency: true
+    }
+  })
+}
+
+export async function getExtraordinaryDispatches(dateStr: string, diningRoomId?: number, userContext?: any) {
   const startOfDay = new Date(`${dateStr}T00:00:00.000Z`)
   const endOfDay = new Date(`${dateStr}T23:59:59.999Z`)
 
@@ -45,6 +56,25 @@ export async function getExtraordinaryDispatches(dateStr: string, diningRoomId?:
 
   if (diningRoomId) {
     whereClause.diningRoomId = diningRoomId
+  }
+
+  if (userContext && !userContext.isGlobal) {
+    const userSubIds: number[] = userContext.subdependencyIds || (userContext.subdependencyId ? [userContext.subdependencyId] : [])
+    
+    if (userSubIds.length > 0) {
+      whereClause.OR = [
+        { subdependencyId: { in: userSubIds } },
+        { dispatchedById: userContext.id }
+      ]
+    } else if (userContext.dependencyId) {
+      whereClause.OR = [
+        { dependencyId: userContext.dependencyId },
+        { subdependency: { dependencyId: userContext.dependencyId } },
+        { dispatchedById: userContext.id }
+      ]
+    } else {
+      whereClause.dispatchedById = userContext.id
+    }
   }
 
   return await prisma.extraordinaryDispatch.findMany({

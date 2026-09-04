@@ -1,10 +1,11 @@
 import { defineApiHandler } from '../../utils/handler'
-import { requirePermission } from '../../utils/auth'
+import { requirePermission, requireUserContext } from '../../utils/auth'
 import * as extraordinaryService from '../../services/extraordinaryService'
 import dayjs from 'dayjs'
 
 export default defineApiHandler(async (event) => {
-  const userId = await requirePermission(event, 'EXTRAORDINARY', 'create')
+  await requirePermission(event, 'EXTRAORDINARY', 'create')
+  const user = await requireUserContext(event)
 
   const body = await readBody(event)
 
@@ -13,7 +14,7 @@ export default defineApiHandler(async (event) => {
     body.date = dayjs().format('YYYY-MM-DD')
   }
 
-  const dispatch = await extraordinaryService.createExtraordinaryDispatch(body, userId)
+  const dispatch = await extraordinaryService.createExtraordinaryDispatch(body, user.id, undefined, user)
 
   return {
     success: true,

@@ -97,6 +97,7 @@
       :dining-rooms-options="controller.diningRoomsOptions.value"
       :dependencies-options="controller.dependenciesOptions.value"
       :get-subdependencies="controller.getSubdependencies"
+      :is-global="controller.isGlobal.value"
       :is-submitting="controller.isSubmitting.value"
       @submit="controller.submitForm"
     />

@@ -68,9 +68,11 @@
                 label="Dependencia a Visitar" 
                 outlined 
                 dense
-                clearable
+                :clearable="isGlobal"
                 emit-value
                 map-options
+                :disable="!isGlobal && !!localForm.dependencyId"
+                :readonly="!isGlobal && !!localForm.dependencyId"
                 @update:model-value="localForm.subdependencyId = null"
               />
             </div>
@@ -151,6 +153,7 @@ const props = defineProps<{
   diningRoomsOptions: any[]
   dependenciesOptions: any[]
   getSubdependencies: (depId: number) => any[]
+  isGlobal?: boolean
   isSubmitting: boolean
 }>()
 

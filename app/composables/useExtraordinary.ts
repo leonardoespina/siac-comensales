@@ -4,10 +4,13 @@ import { useDiningRoomsStore } from '../stores/diningRooms'
 import { useDependenciesStore } from '../stores/dependencies'
 import { useQuasar } from 'quasar'
 
+import { useAuthStore } from '../stores/auth'
+
 export function useExtraordinary() {
   const store = useExtraordinaryStore()
   const diningRoomsStore = useDiningRoomsStore()
   const dependenciesStore = useDependenciesStore()
+  const authStore = useAuthStore()
   const $q = useQuasar()
 
   const isModalOpen = ref(false)
@@ -18,15 +21,23 @@ export function useExtraordinary() {
   // Internal form data to pass to the modal
   const formData = ref<any>(null)
 
+  const isGlobal = computed(() => authStore.hasPermission('GLOBAL_ACCESS', 'canRead'))
+
+  const userSubIds = computed<number[]>(() => 
+    authStore.user?.subdependencies?.map((s: any) => s.id) || (authStore.user?.subdependencyId ? [authStore.user.subdependencyId] : [])
+  )
+
   // Catalogs
   const diningRoomsOptions = computed(() => 
     diningRoomsStore.activeDiningRooms.map(dr => ({ label: dr.name, value: dr.id }))
   )
-  const dependenciesOptions = computed(() => 
-    dependenciesStore.dependencies
-      .filter((d: any) => d.active !== false)
-      .map((d: any) => ({ label: d.name, value: d.id }))
-  )
+  const dependenciesOptions = computed(() => {
+    let deps = dependenciesStore.dependencies.filter((d: any) => d.active !== false)
+    if (!isGlobal.value && authStore.user?.dependencyId) {
+      deps = deps.filter((d: any) => d.id === authStore.user?.dependencyId)
+    }
+    return deps.map((d: any) => ({ label: d.name, value: d.id }))
+  })
 
   const loadCatalogs = async () => {
     await Promise.all([
@@ -45,12 +56,17 @@ export function useExtraordinary() {
   const getSubdependencies = (depId: number) => {
     const dep = dependenciesStore.dependencies.find((d: any) => d.id === depId)
     if (!dep || !dep.subdependencies) return []
-    return dep.subdependencies
-      .filter((s: any) => s.active !== false)
-      .map((s: any) => ({ label: s.name, value: s.id }))
+    let subs = dep.subdependencies.filter((s: any) => s.active !== false)
+    if (!isGlobal.value && userSubIds.value.length > 0) {
+      subs = subs.filter((s: any) => userSubIds.value.includes(s.id))
+    }
+    return subs.map((s: any) => ({ label: s.name, value: s.id }))
   }
 
   const openForm = () => {
+    const defaultDepId = isGlobal.value ? null : (authStore.user?.dependencyId || null)
+    const defaultSubId = isGlobal.value ? null : (userSubIds.value.length === 1 ? userSubIds.value[0] : null)
+
     formData.value = {
       id: null,
       date: searchDate.value || new Date().toISOString().split('T')[0],
@@ -63,8 +79,8 @@ export function useExtraordinary() {
         { shiftType: 'SOBRECENA', quantity: 0 }
       ],
       modality: 'DINE_IN',
-      dependencyId: null,
-      subdependencyId: null,
+      dependencyId: defaultDepId,
+      subdependencyId: defaultSubId,
       diningRoomId: searchDiningRoom.value || null,
       observation: ''
     }
@@ -188,6 +204,7 @@ export function useExtraordinary() {
     // Derived
     dispatches: computed(() => store.dispatches),
     isLoading: computed(() => store.isLoading),
+    isGlobal: readonly(isGlobal),
     diningRoomsOptions,
     dependenciesOptions,
     
