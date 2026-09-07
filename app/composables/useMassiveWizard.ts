@@ -125,14 +125,14 @@ export function useMassiveWizard() {
       }
       
       const matchedDiner = mappingArray.value[matchedIndex]
-      promptConfirmation(matchedDiner.cedula, matchedDiner.name, store.fetchHistory)
+      promptConfirmation(matchedDiner.cedula, matchedDiner.name, () => store.loadHistory({ date: searchDate.value }))
       
     } catch (error) {
       // Ignore abort errors
     }
   }
 
-  function promptConfirmation(cedula: string, name: string, onSuccessCallback: () => void) {
+  function promptConfirmation(cedula: string, name: string, onSuccessCallback?: () => void) {
     $q.dialog({
       title: 'Confirmar Retiro Masivo',
       message: `Se ha identificado a: <strong>${name}</strong> (C.I. ${cedula}).<br><br>¿Confirma que esta persona retira el servicio masivo?`,
@@ -148,18 +148,22 @@ export function useMassiveWizard() {
     })
   }
 
-  async function handleManualSubmit(onSuccessCallback: () => void) {
+  async function handleManualSubmit(onSuccessCallback?: () => void) {
     if (!scannedCedula.value) {
       $q.notify({ type: 'warning', message: 'Debe ingresar una cédula' })
       return
     }
 
     const cedula = scannedCedula.value.trim()
+    const numericCedula = cedula.replace(/\D/g, '')
     let name = 'Usuario Desconocido'
     let isUnknown = true
 
     try {
-      const foundInMapping = mappingArray.value.find(d => d.cedula === cedula)
+      const foundInMapping = mappingArray.value.find(d => {
+        const dNum = d.cedula ? String(d.cedula).replace(/\D/g, '') : ''
+        return d.cedula === cedula || (numericCedula && dNum === numericCedula)
+      })
       if (foundInMapping) {
         name = foundInMapping.name
         isUnknown = false
@@ -177,7 +181,7 @@ export function useMassiveWizard() {
     if (isUnknown) {
       $q.notify({ 
         type: 'negative', 
-        message: `La cédula ${cedula} no está registrada o no pertenece a la dependencia. No se puede proceder.` 
+        message: `La cédula ${cedula} no está registrada en el sistema. No se puede proceder.` 
       })
       scannedCedula.value = ''
       return
@@ -226,14 +230,13 @@ export function useMassiveWizard() {
     }
   }
 
-  async function processDispatch(onSuccessCallback: () => void) {
+  async function processDispatch(onSuccessCallback?: () => void) {
     if (!scannedCedula.value) {
       $q.notify({ type: 'warning', message: 'Debe ingresar o escanear una cédula' })
       return
     }
 
     isDispatching.value = true
-    warningMessage.value = ''
 
     try {
       const response: any = await store.confirmBatchDispatch(
@@ -242,17 +245,33 @@ export function useMassiveWizard() {
         forceDispatch.value
       )
 
-      $q.notify({ type: 'positive', message: response.message })
+      $q.notify({ type: 'positive', message: response.message || 'Despacho masivo exitoso' })
       isOpen.value = false
-      if (onSuccessCallback) onSuccessCallback()
-    } catch (error: any) {
-      const errData = error.response?._data
-      if (errData?.statusCode === 'DIFFERENT_DEPENDENCY') {
-        warningMessage.value = errData.message
-        forceDispatch.value = true
+      warningMessage.value = ''
+      forceDispatch.value = false
+      if (onSuccessCallback) {
+        onSuccessCallback()
       } else {
-        $q.notify({ type: 'negative', message: errData?.message || 'Error al procesar el despacho' })
+        store.loadHistory({ date: searchDate.value })
+      }
+    } catch (error: any) {
+      const errData = error.data || error.response?._data
+      const errCode = errData?.data?.code || errData?.code
+      const errMsg = errData?.message || errData?.statusMessage || 'Error al procesar el despacho'
+
+      if (errCode === 'DIFFERENT_DEPENDENCY') {
+        warningMessage.value = errMsg
+        forceDispatch.value = true
+        $q.notify({ 
+          type: 'warning', 
+          message: errMsg,
+          timeout: 6000 
+        })
+      } else {
+        $q.notify({ type: 'negative', message: errMsg })
         scannedCedula.value = ''
+        forceDispatch.value = false
+        warningMessage.value = ''
       }
     } finally {
       isDispatching.value = false
@@ -272,6 +291,7 @@ export function useMassiveWizard() {
     selectedBatch,
     scannedCedula,
     warningMessage: readonly(warningMessage),
+    forceDispatch: readonly(forceDispatch),
     isDispatching: readonly(isDispatching),
     
     // Derived

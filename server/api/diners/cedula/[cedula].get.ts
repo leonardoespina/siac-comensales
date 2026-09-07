@@ -9,11 +9,11 @@ export default defineApiHandler(async (event) => {
   const cedula = event.context.params?.cedula
   if (!cedula) throw new ValidationError(['Cédula es requerida'])
 
-  const diner = await dinerRepo.getDinerByCedula(cedula as string)
+  const person = await dinerRepo.getDinerOrUserByCedula(cedula as string)
   
-  if (!diner) {
-    throw new NotFoundError('Comensal', cedula)
+  if (!person) {
+    throw new NotFoundError('Comensal o Trabajador', cedula)
   }
 
-  return diner
+  return person
 })

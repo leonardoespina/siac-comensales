@@ -52,7 +52,10 @@ export async function getMassiveRequestById(batchId: number) {
     where: { id: batchId },
     include: {
       createdBy: {
-        include: { subdependency: true }
+        include: { 
+          dependency: true,
+          subdependency: { include: { dependency: true } } 
+        }
       },
       details: {
         where: { modality: 'TAKE_AWAY' },
@@ -78,19 +81,48 @@ export async function executeBatchDispatch(batchId: number, operatorId: number, 
   })
 }
 
-// Para buscar "mulas"
+// Para buscar comensal o usuario autorizado
 export async function findWorkerOrDiner(cedula: string) {
-  const workerUser = await prisma.user.findUnique({ 
-    where: { cedula }, 
-    include: { dependency: true } 
-  })
-  if (workerUser) return { type: 'WORKER', data: workerUser }
+  const numericCedula = cedula.replace(/\D/g, '')
+  const cedulaVariants = Array.from(new Set([
+    cedula,
+    numericCedula,
+    `V-${numericCedula}`,
+    `E-${numericCedula}`,
+    `V${numericCedula}`,
+    `E${numericCedula}`
+  ])).filter(Boolean)
 
-  const diner = await prisma.diner.findUnique({ 
-    where: { cedula },
-    include: { subdependency: { include: { dependency: true } } }
+  const diner = await prisma.diner.findFirst({
+    where: {
+      cedula: { in: cedulaVariants }
+    },
+    include: {
+      subdependency: {
+        include: { dependency: true }
+      }
+    }
   })
-  if (diner) return { type: 'DINER', data: diner }
+
+  const workerUser = await prisma.user.findFirst({
+    where: {
+      cedula: { in: cedulaVariants }
+    },
+    include: {
+      dependency: true,
+      subdependency: {
+        include: { dependency: true }
+      },
+      role: true
+    }
+  })
+
+  if (diner || workerUser) {
+    return {
+      diner,
+      workerUser
+    }
+  }
 
   return null
 }

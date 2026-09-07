@@ -92,6 +92,42 @@ export async function getDinerByCedula(cedula: string) {
   })
 }
 
+export async function getDinerOrUserByCedula(cedula: string) {
+  const numericCedula = cedula.replace(/\D/g, '')
+  const diner = await getDinerByCedula(cedula)
+  if (diner) return diner
+
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { cedula: cedula },
+        { cedula: numericCedula },
+        { cedula: `V-${numericCedula}` },
+        { cedula: `E-${numericCedula}` },
+        { cedula: `V${numericCedula}` },
+        { cedula: `E${numericCedula}` }
+      ]
+    },
+    include: {
+      dependency: true,
+      subdependency: { include: { dependency: true } }
+    }
+  })
+
+  if (user) {
+    return {
+      id: user.id,
+      cedula: user.cedula,
+      name: user.name,
+      active: user.active,
+      subdependency: user.subdependency || null,
+      dependency: user.dependency || user.subdependency?.dependency || null
+    }
+  }
+
+  return null
+}
+
 export async function createDiner(data: { cedula: string, name: string, rationType: string, squadId: number, subdependencyId: number, positionId?: number, siteId?: number }) {
   return prisma.diner.create({
     data,

@@ -257,7 +257,12 @@
 
               <q-stepper-navigation class="q-mt-xl row justify-between">
                 <q-btn flat color="primary" label="Volver" @click="wizard.step.value = 2" />
-                <q-btn color="positive" label="Procesar y Despachar Lote" @click="() => wizard.handleManualSubmit(fetchHistory)" :loading="wizard.isDispatching.value" />
+                <q-btn 
+                  :color="wizard.forceDispatch.value ? 'warning' : 'positive'" 
+                  :label="wizard.forceDispatch.value ? 'Confirmar y Despachar Lote (Forzado)' : 'Procesar y Despachar Lote'" 
+                  @click="() => wizard.handleManualSubmit(fetchHistory)" 
+                  :loading="wizard.isDispatching.value" 
+                />
               </q-stepper-navigation>
             </q-step>
 

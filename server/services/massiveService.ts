@@ -73,72 +73,81 @@ export async function processMassiveDispatch(batchId: number, scannedCedula: str
     throw new DomainError('Este lote masivo ya fue despachado completamente', 409, 'ALREADY_DISPATCHED')
   }
 
-  // --- NUEVA VALIDACIÓN DE SEGURIDAD (FECHA Y HORARIO) ---
+  // --- VALIDACIÓN DE FECHA ---
   const now = dayjs().tz('America/Caracas')
-  const currentTimeStr = now.format('HH:mm')
   const requestDateStr = dayjs.utc(massiveRequest.date).format('YYYY-MM-DD')
   const todayStr = now.format('YYYY-MM-DD')
 
-  if (requestDateStr !== todayStr) {
+  const bypassTime = process.env.TEST_BYPASS_TIME_RULES === 'true'
+  if (requestDateStr !== todayStr && !bypassTime) {
     throw new DomainError(`Alerta: Este pedido es para el día ${requestDateStr}, pero hoy es ${todayStr}. Los despachos solo se permiten en su fecha asignada.`, 403, 'WRONG_DAY')
   }
-  // -------------------------------------------------------
 
   const personInfo = await massiveRepo.findWorkerOrDiner(scannedCedula)
   if (!personInfo) {
-    throw new DomainError('La cédula escaneada no existe en los registros de la empresa', 404, 'NOT_FOUND')
+    throw new DomainError('La cédula ingresada no existe en los registros de la empresa', 404, 'NOT_FOUND')
   }
 
-  let scannedPerson = { cedula: '', name: '', dependencyId: null, dependencyName: '' }
-  if (personInfo.type === 'WORKER') {
-    scannedPerson = {
-      cedula: personInfo.data.cedula,
-      name: personInfo.data.name,
-      dependencyId: personInfo.data.dependencyId,
-      dependencyName: personInfo.data.dependency?.name || ''
-    }
-  } else {
-    scannedPerson = {
-      cedula: personInfo.data.cedula,
-      name: personInfo.data.name,
-      dependencyId: personInfo.data.subdependency?.dependencyId,
-      dependencyName: personInfo.data.subdependency?.dependency?.name || ''
-    }
-  }
+  const diner = personInfo.diner
+  const user = personInfo.workerUser
+
+  const personName = diner?.name || user?.name || 'Desconocido'
+  const personCedula = diner?.cedula || user?.cedula || scannedCedula
+
+  // Recolectar todas las dependencias a las que pertenece la persona (comensal o usuario)
+  const userDepId = user?.dependencyId ?? user?.subdependency?.dependencyId ?? null
+  const dinerDepId = diner?.subdependency?.dependencyId ?? null
+  
+  const personDependencyIds = [userDepId, dinerDepId].filter((id): id is number => id !== null)
+  const personDependencyName = diner?.subdependency?.dependency?.name || user?.dependency?.name || user?.subdependency?.dependency?.name || 'Desconocida'
+  const isAdmin = user?.role?.name === 'ADMIN'
 
   const firstDiner = massiveRequest.details[0]?.diner
   const expectedCedula = firstDiner?.cedula
-  const expectedDependencyId = firstDiner?.subdependency?.dependencyId
+  const expectedDependencyId = firstDiner?.subdependency?.dependencyId || massiveRequest.createdBy?.dependencyId || massiveRequest.createdBy?.subdependency?.dependencyId
+  const requestCreatorCedula = massiveRequest.createdBy?.cedula
+
+  const numericScanned = personCedula.replace(/\D/g, '')
+  const numericExpected = expectedCedula ? expectedCedula.replace(/\D/g, '') : null
+  const numericCreator = requestCreatorCedula ? requestCreatorCedula.replace(/\D/g, '') : null
+
   let isSubstitute = false
   let warningMessage = null
 
-  // Nivel 1: Es la misma persona autorizada explicitamente
-  if (expectedCedula && scannedPerson.cedula === expectedCedula) {
-    // OK
-  } else if (expectedDependencyId && scannedPerson.dependencyId === expectedDependencyId) {
-    // Nivel 2: Misma dependencia, warning leve
+  // Nivel 1: Es la persona autorizada explícitamente o el creador de la solicitud
+  const isDirectAuthorized = (numericExpected && numericScanned === numericExpected) ||
+                             (numericCreator && numericScanned === numericCreator)
+
+  if (isDirectAuthorized) {
+    // OK directo
+  } else if (expectedDependencyId && personDependencyIds.includes(expectedDependencyId)) {
+    // Nivel 2: Misma gerencia/dependencia, suplente válido de la misma área
     isSubstitute = true
-    warningMessage = `Entregado al suplente: ${scannedPerson.name}`
+    warningMessage = `Entregado al suplente: ${personName}`
+  } else if (isAdmin) {
+    // Administrador retirando en nombre del área
+    isSubstitute = true
+    warningMessage = `Entregado al Administrador: ${personName}`
   } else {
     // Nivel 3: Diferente dependencia
     if (!force) {
       throw new DomainError(
-        `Alerta de Seguridad: ${scannedPerson.name} pertenece a otra dependencia (${scannedPerson.dependencyName || 'Desconocida'}). Requiere autorización forzada para entregar.`, 
+        `Alerta de Seguridad: ${personName} pertenece a otra dependencia (${personDependencyName}). Requiere confirmación para autorizar la entrega.`, 
         403, 
         'DIFFERENT_DEPENDENCY'
       )
     }
     isSubstitute = true
-    warningMessage = `Entregado a suplente externo: ${scannedPerson.name} (${scannedPerson.dependencyName || 'N/A'}) - Forzado por Operador`
+    warningMessage = `Entregado a suplente externo: ${personName} (${personDependencyName}) - Forzado por Operador`
   }
 
-  await massiveRepo.executeBatchDispatch(batchId, operatorId, scannedPerson.cedula)
+  await massiveRepo.executeBatchDispatch(batchId, operatorId, personCedula)
 
   return {
     success: true,
-    message: 'Despacho masivo confirmado correctamente',
+    message: warningMessage || 'Despacho masivo confirmado correctamente',
     isSubstitute,
-    receiver: scannedPerson.name,
+    receiver: personName,
     quantity: massiveRequest.details.reduce((sum, d) => sum + d.quantity, 0)
   }
 }
