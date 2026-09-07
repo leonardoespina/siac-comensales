@@ -33,7 +33,7 @@ export async function generateMasterReport(filters: any, user: any) {
   // Retrieve raw data in parallel
   const [rawData, extraordinaryData] = await Promise.all([
     reportRepo.getConsolidatedReport(parsedFilters, security),
-    reportRepo.getApprovedExtraordinaryForReport(parsedFilters, security)
+    reportRepo.getExtraordinaryForReport(parsedFilters, security)
   ])
 
   // Map standard requests
@@ -57,37 +57,46 @@ export async function generateMasterReport(filters: any, user: any) {
       rationType: d.rationType,
       estatus: d.dispatchedAt ? 'DESPACHADO' : d.request.status,
       fechaDespacho: d.dispatchedAt ? d.dispatchedAt.toISOString() : null,
-      quantity: d.quantity
+      quantity: d.quantity,
+      isExtraordinary: false
     }
   })
 
-  // Map extraordinary visits (if status filter is DESPACHADAS or APPROVED or undefined, include them)
-  const isExcludedByStatus = filters.status && !['DESPACHADAS', 'APPROVED'].includes(filters.status)
-  
-  const extraordinaryReport = isExcludedByStatus
-    ? []
-    : extraordinaryData.map(e => {
-        const depName = e.subdependency?.dependency?.name || e.dependency?.name || 'N/A'
-        const subdepName = e.subdependency?.name || 'N/A'
+  // Map extraordinary visits
+  const extraordinaryReport = extraordinaryData.map(e => {
+    const depName = e.subdependency?.dependency?.name || e.dependency?.name || 'N/A'
+    const subdepName = e.subdependency?.name || 'N/A'
 
-        return {
-          id: `EXTRA-${e.id}`,
-          ticketNo: `EXTRA-${e.id}`,
-          cedula: e.personId,
-          firstName: e.companyName.split(' ')[0] || '',
-          lastName: e.companyName.split(' ').slice(1).join(' ') || '',
-          fullName: e.companyName,
-          gerencia: depName,
-          adscripcion: subdepName,
-          comedor: e.diningRoom?.name || 'N/A',
-          servicio: e.shiftType,
-          modalidad: 'VISITA EXTRAORDINARIA',
-          rationType: 'REGULAR',
-          estatus: 'DESPACHADO',
-          fechaDespacho: e.approvedAt ? e.approvedAt.toISOString() : e.dispatchedAt.toISOString(),
-          quantity: e.quantity
-        }
-      })
+    let mappedStatus = e.status
+    if (e.status === 'APPROVED') {
+      mappedStatus = 'DESPACHADO'
+    }
+
+    let dispatchDate: string | null = null
+    if (e.status === 'APPROVED') {
+      dispatchDate = e.approvedAt ? e.approvedAt.toISOString() : (e.dispatchedAt ? e.dispatchedAt.toISOString() : null)
+    }
+
+    return {
+      id: `EXTRA-${e.id}`,
+      ticketNo: `EXTRA-${e.id}`,
+      cedula: e.personId,
+      firstName: e.companyName.split(' ')[0] || '',
+      lastName: e.companyName.split(' ').slice(1).join(' ') || '',
+      fullName: e.companyName,
+      gerencia: depName,
+      adscripcion: subdepName,
+      comedor: e.diningRoom?.name || 'N/A',
+      servicio: e.shiftType,
+      modalidad: 'VISITA EXTRAORDINARIA',
+      rationType: 'REGULAR',
+      estatus: mappedStatus,
+      fechaDespacho: dispatchDate,
+      quantity: e.quantity,
+      isExtraordinary: true,
+      extraordinaryStatus: e.status
+    }
+  })
 
   const combined = [...standardReport, ...extraordinaryReport]
 
@@ -127,7 +136,7 @@ export async function generateSummaryReport(filters: any, user: any) {
   // Fetch raw data in parallel
   const [rawData, extraordinaryData] = await Promise.all([
     reportRepo.getConsolidatedReport(parsedFilters, security),
-    isExtraordinaryExcluded ? Promise.resolve([]) : reportRepo.getApprovedExtraordinaryForReport(parsedFilters, security)
+    isExtraordinaryExcluded ? Promise.resolve([]) : reportRepo.getExtraordinaryForReport(parsedFilters, security)
   ])
 
   // Map to a common flat structure for aggregation

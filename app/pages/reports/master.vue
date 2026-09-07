@@ -98,6 +98,8 @@ const summaryCounts = computed(() => {
     cena: 0,
     sobrecena: 0,
     dieta: 0,
+    visitasAprobadas: 0,
+    visitasPendientes: 0,
     total: 0
   }
   for (const row of filteredRows.value) {
@@ -107,6 +109,16 @@ const summaryCounts = computed(() => {
     else if (row.servicio === 'CENA') counts.cena += qty
     else if (row.servicio === 'SOBRECENA') counts.sobrecena += qty
     if (row.rationType === 'DIETA') counts.dieta += qty
+
+    // Contabilizar Visitas Extraordinarias por estatus
+    if (row.isExtraordinary || row.modalidad === 'VISITA EXTRAORDINARIA') {
+      if (row.estatus === 'DESPACHADO' || row.estatus === 'APPROVED' || row.extraordinaryStatus === 'APPROVED') {
+        counts.visitasAprobadas += qty
+      } else if (row.estatus === 'PENDING' || row.extraordinaryStatus === 'PENDING') {
+        counts.visitasPendientes += qty
+      }
+    }
+
     counts.total += qty
   }
   return counts
@@ -239,9 +251,9 @@ onMounted(() => {
       </q-card-section>
     </q-card>
 
-    <!-- Summary Counters (Legacy Match) -->
-    <div class="row q-col-gutter-sm q-mb-md">
-      <div class="col-12 col-sm-2">
+    <!-- Summary Counters (Legacy Match + Extraordinary Visits) -->
+    <div class="row q-col-gutter-sm q-mb-md items-center">
+      <div class="col-6 col-sm-3 col-md">
         <q-card class="bg-amber-3 shadow-2">
           <q-card-section class="q-pa-sm text-center">
             <div class="text-caption text-weight-bold text-grey-8">Desayuno</div>
@@ -249,7 +261,7 @@ onMounted(() => {
           </q-card-section>
         </q-card>
       </div>
-      <div class="col-12 col-sm-2">
+      <div class="col-6 col-sm-3 col-md">
         <q-card class="bg-light-green-3 shadow-2">
           <q-card-section class="q-pa-sm text-center">
             <div class="text-caption text-weight-bold text-grey-8">Almuerzo</div>
@@ -257,7 +269,7 @@ onMounted(() => {
           </q-card-section>
         </q-card>
       </div>
-      <div class="col-12 col-sm-2">
+      <div class="col-6 col-sm-3 col-md">
         <q-card class="bg-cyan-3 shadow-2">
           <q-card-section class="q-pa-sm text-center">
             <div class="text-caption text-weight-bold text-grey-8">Cena</div>
@@ -265,7 +277,7 @@ onMounted(() => {
           </q-card-section>
         </q-card>
       </div>
-      <div class="col-12 col-sm-2">
+      <div class="col-6 col-sm-3 col-md">
         <q-card class="bg-deep-purple-3 shadow-2">
           <q-card-section class="q-pa-sm text-center">
             <div class="text-caption text-weight-bold text-grey-8">Sobrecena</div>
@@ -273,7 +285,7 @@ onMounted(() => {
           </q-card-section>
         </q-card>
       </div>
-      <div class="col-12 col-sm-2">
+      <div class="col-6 col-sm-3 col-md">
         <q-card class="bg-orange-3 shadow-2">
           <q-card-section class="q-pa-sm text-center">
             <div class="text-caption text-weight-bold text-grey-8">Total Dieta</div>
@@ -281,8 +293,29 @@ onMounted(() => {
           </q-card-section>
         </q-card>
       </div>
-      <q-space />
-      <div class="col-12 col-sm-3">
+      <div class="col-6 col-sm-3 col-md">
+        <q-card class="bg-teal-3 text-dark shadow-2">
+          <q-card-section class="q-pa-sm text-center">
+            <div class="row items-center justify-center q-gutter-xs">
+              <q-icon name="check_circle" size="xs" color="teal-9" />
+              <span class="text-caption text-weight-bold text-grey-9">Visitas Aprobadas</span>
+            </div>
+            <div class="text-h6 text-weight-bold text-teal-10">{{ summaryCounts.visitasAprobadas }}</div>
+          </q-card-section>
+        </q-card>
+      </div>
+      <div class="col-6 col-sm-3 col-md">
+        <q-card class="bg-orange-2 text-dark shadow-2">
+          <q-card-section class="q-pa-sm text-center">
+            <div class="row items-center justify-center q-gutter-xs">
+              <q-icon name="pending_actions" size="xs" color="deep-orange-9" />
+              <span class="text-caption text-weight-bold text-grey-9">Visitas Por Aprobar</span>
+            </div>
+            <div class="text-h6 text-weight-bold text-deep-orange-10">{{ summaryCounts.visitasPendientes }}</div>
+          </q-card-section>
+        </q-card>
+      </div>
+      <div class="col-12 col-sm-3 col-md-2">
         <q-card class="bg-yellow-13 shadow-2">
           <q-card-section class="q-pa-sm text-center">
             <div class="text-caption text-weight-bold text-dark">TOTAL PLATOS</div>
@@ -334,7 +367,10 @@ onMounted(() => {
 
         <template v-slot:body-cell-modalidad="props">
           <q-td :props="props">
-            <q-chip v-if="props.row.modalidad === 'PARA LLEVAR'" size="sm" color="purple" text-color="white" icon="inventory_2">
+            <q-chip v-if="props.row.modalidad === 'VISITA EXTRAORDINARIA'" size="sm" color="teal-7" text-color="white" icon="badge">
+              VISITA ({{ props.row.quantity }})
+            </q-chip>
+            <q-chip v-else-if="props.row.modalidad === 'PARA LLEVAR'" size="sm" color="purple" text-color="white" icon="inventory_2">
               LLEVAR ({{ props.row.quantity }})
             </q-chip>
             <span v-else class="text-grey-8">BANDEJA</span>

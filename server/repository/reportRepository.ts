@@ -100,14 +100,28 @@ export async function getConsolidatedReport(filters: MasterReportFilters, securi
   })
 }
 
-export async function getApprovedExtraordinaryForReport(filters: MasterReportFilters, security: SecurityContext) {
+export async function getExtraordinaryForReport(filters: MasterReportFilters, security: SecurityContext) {
   const whereClause: any = {
-    status: 'APPROVED',
     deletedAt: null,
     date: {
       gte: filters.dateFrom,
       lte: filters.dateTo
     }
+  }
+
+  if (filters.status) {
+    if (filters.status === 'DESPACHADAS' || filters.status === 'APPROVED') {
+      whereClause.status = 'APPROVED'
+    } else if (filters.status === 'PENDING') {
+      whereClause.status = 'PENDING'
+    } else if (filters.status === 'REJECTED') {
+      whereClause.status = 'REJECTED'
+    } else {
+      whereClause.status = filters.status
+    }
+  } else {
+    // Si no hay filtro de estatus, traemos tanto Aprobadas como Pendientes
+    whereClause.status = { in: ['APPROVED', 'PENDING'] }
   }
 
   if (filters.diningRoomId !== undefined && filters.diningRoomId !== null) {
