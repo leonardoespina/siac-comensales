@@ -85,17 +85,19 @@
                       <div class="text-caption text-weight-bold text-grey-8 q-mb-xs">Fecha de Solicitud:</div>
                       <q-input 
                         v-model="form.formDateText.value" 
-                        label="Seleccione la fecha" 
+                        label="Seleccione la fecha o rango (hasta 5 días)" 
                         outlined 
                         dense 
                         bg-color="white"
                         readonly
+                        :disable="form.isViewMode.value || form.isEditMode.value"
                       >
                         <template v-slot:append>
-                          <q-icon name="event" class="cursor-pointer">
+                          <q-icon name="event" class="cursor-pointer" v-if="!form.isViewMode.value && !form.isEditMode.value">
                             <q-popup-proxy cover transition-show="scale" transition-hide="scale">
                               <q-date 
                                 v-model="form.filters.value.date" 
+                                range
                                 mask="YYYY-MM-DD"
                                 :options="form.allowedDates"
                               >
@@ -141,7 +143,7 @@
                   </q-card>
 
                   <!-- Tipo de Retiro -->
-                  <q-card v-if="form.allowsBulkRequests.value" flat bordered class="bg-white">
+                  <q-card v-if="form.allowsBulkRequests.value || form.masterChecks.value['MASIVO']" flat bordered class="bg-white">
                     <q-card-section class="q-pa-sm">
                       <div class="text-caption text-weight-bold text-grey-8 q-mb-xs">Tipo de Retiro</div>
                       <div class="row q-col-gutter-xs">
@@ -227,7 +229,100 @@
                   >
                     <template v-slot:body-cell="props">
                       <q-td :props="props" v-if="form.activeShifts.value.includes(props.col.name)">
-                        <q-checkbox v-model="form.gridState.value[props.row.id][props.col.name]" dense color="primary" :disable="form.isViewMode.value" />
+                        <div class="column items-center justify-center q-gutter-y-xs q-py-xs">
+                          <!-- Checkbox del turno -->
+                          <q-checkbox 
+                            v-model="form.gridState.value[props.row.id][props.col.name]" 
+                            dense 
+                            color="primary" 
+                            :disable="form.isViewMode.value" 
+                          />
+
+                          <!-- Botón/Chip ultra suave y limpio para el comedor del servicio -->
+                          <div>
+                            <q-btn
+                              flat
+                              dense
+                              no-caps
+                              size="xs"
+                              :class="!form.gridState.value[props.row.id]?.[props.col.name] 
+                                ? 'bg-transparent text-grey-5' 
+                                : (form.hasCustomShiftRoom(props.row.id, props.col.name) 
+                                    ? 'bg-teal-1 text-teal-10 text-weight-bold' 
+                                    : 'bg-grey-2 text-grey-8')"
+                              class="q-px-xs"
+                              style="font-size: 10px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.08);"
+                              :disable="!form.gridState.value[props.row.id]?.[props.col.name] || form.isViewMode.value"
+                            >
+                              <div class="row items-center no-wrap q-gutter-x-xs">
+                                <q-icon 
+                                  v-if="form.hasCustomShiftRoom(props.row.id, props.col.name) && form.gridState.value[props.row.id]?.[props.col.name]" 
+                                  name="restaurant" 
+                                  size="12px" 
+                                  color="teal-8" 
+                                />
+                                <span class="ellipsis" style="max-width: 75px;">
+                                  {{ getRoomShortName(form.getEffectiveDiningRoom(props.row.id, props.col.name)) }}
+                                </span>
+                                <q-icon name="arrow_drop_down" size="14px" color="grey-6" v-if="form.gridState.value[props.row.id]?.[props.col.name] && !form.isViewMode.value" />
+                              </div>
+
+                              <q-tooltip v-if="!form.gridState.value[props.row.id]?.[props.col.name]">
+                                Marque el servicio para habilitar o cambiar comedor
+                              </q-tooltip>
+                              <q-tooltip v-else>
+                                {{ getRoomFullName(form.getEffectiveDiningRoom(props.row.id, props.col.name)) }} (Clic para cambiar)
+                              </q-tooltip>
+
+                              <!-- Menú Flotante para cambiar comedor de este servicio (si no está en modo lectura) -->
+                              <q-menu v-if="!form.isViewMode.value" auto-close anchor="bottom middle" self="top middle" class="shadow-4">
+                                <q-list dense style="min-width: 170px" class="q-py-xs">
+                                  <q-item-label header class="text-weight-bold text-caption text-primary q-py-xs">
+                                    Comedor para {{ props.col.name }}
+                                  </q-item-label>
+                                  <q-separator />
+
+                                  <!-- Opción Restaurar Default -->
+                                  <q-item 
+                                    clickable 
+                                    v-ripple 
+                                    @click="form.setShiftDiningRoom(props.row.id, props.col.name, null)"
+                                    :active="!form.hasCustomShiftRoom(props.row.id, props.col.name)"
+                                    active-class="bg-blue-1 text-primary text-weight-bold"
+                                  >
+                                    <q-item-section avatar style="min-width: 24px;">
+                                      <q-icon name="sync" size="14px" />
+                                    </q-item-section>
+                                    <q-item-section class="text-caption">
+                                      Default ({{ getRoomShortName(form.getDefaultDiningRoom(props.row.id)) }})
+                                    </q-item-section>
+                                  </q-item>
+
+                                  <q-separator />
+
+                                  <!-- Lista de Comedores -->
+                                  <q-item 
+                                    v-for="room in diningRoomsStore.activeDiningRooms" 
+                                    :key="room.id" 
+                                    clickable 
+                                    v-ripple 
+                                    @click="form.setShiftDiningRoom(props.row.id, props.col.name, room.id)"
+                                    :active="form.getEffectiveDiningRoom(props.row.id, props.col.name) === room.id"
+                                    active-class="bg-teal-1 text-teal-10 text-weight-bold"
+                                  >
+                                    <q-item-section avatar style="min-width: 24px;">
+                                      <q-icon name="check" size="14px" v-if="form.getEffectiveDiningRoom(props.row.id, props.col.name) === room.id" color="teal" />
+                                      <q-icon name="room" size="14px" v-else color="grey-6" />
+                                    </q-item-section>
+                                    <q-item-section class="text-caption">
+                                      {{ room.name }}
+                                    </q-item-section>
+                                  </q-item>
+                                </q-list>
+                              </q-menu>
+                            </q-btn>
+                          </div>
+                        </div>
                       </q-td>
                       <q-td
                         :props="props"
@@ -284,21 +379,86 @@
                               dense
                               outlined
                               label="Comedor"
-                              :readonly="form.isViewMode.value"
                               clearable
                             />
                           </q-card-section>
                           <q-separator />
                           <q-card-section class="q-pa-sm row q-col-gutter-xs">
-                            <div class="col-12" v-for="shift in form.activeShifts.value" :key="shift">
+                            <div class="col-12 row items-center justify-between q-py-xs" v-for="shift in form.activeShifts.value" :key="shift">
                               <q-checkbox 
                                 v-model="form.gridState.value[props.row.id][shift]" 
                                 :label="shift" 
                                 dense 
                                 size="sm" 
-                                color="primary"
-                                :disable="form.isViewMode.value"
+                                color="primary" 
+                                :disable="form.isViewMode.value" 
                               />
+                              <q-btn
+                                v-if="form.gridState.value[props.row.id]?.[shift]"
+                                flat
+                                dense
+                                no-caps
+                                size="xs"
+                                :class="form.hasCustomShiftRoom(props.row.id, shift) 
+                                  ? 'bg-teal-1 text-teal-10 text-weight-bold' 
+                                  : 'bg-grey-2 text-grey-8'"
+                                class="q-px-xs"
+                                style="font-size: 10px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.08);"
+                                :disable="form.isViewMode.value"
+                              >
+                                <q-icon 
+                                  v-if="form.hasCustomShiftRoom(props.row.id, shift)" 
+                                  name="restaurant" 
+                                  size="12px" 
+                                  color="teal-8" 
+                                  class="q-mr-xs"
+                                />
+                                <span class="ellipsis" style="max-width: 90px;">
+                                  {{ getRoomShortName(form.getEffectiveDiningRoom(props.row.id, shift)) }}
+                                </span>
+                                <q-icon name="arrow_drop_down" size="14px" color="grey-6" v-if="!form.isViewMode.value" />
+
+                                <q-menu v-if="!form.isViewMode.value" auto-close anchor="bottom middle" self="top middle" class="shadow-4">
+                                  <q-list dense style="min-width: 170px" class="q-py-xs">
+                                    <q-item-label header class="text-weight-bold text-caption text-primary q-py-xs">
+                                      Comedor para {{ shift }}
+                                    </q-item-label>
+                                    <q-separator />
+                                    <q-item 
+                                      clickable 
+                                      v-ripple 
+                                      @click="form.setShiftDiningRoom(props.row.id, shift, null)"
+                                      :active="!form.hasCustomShiftRoom(props.row.id, shift)"
+                                      active-class="bg-blue-1 text-primary text-weight-bold"
+                                    >
+                                      <q-item-section avatar style="min-width: 24px;">
+                                        <q-icon name="sync" size="14px" />
+                                      </q-item-section>
+                                      <q-item-section class="text-caption">
+                                        Default ({{ getRoomShortName(form.getDefaultDiningRoom(props.row.id)) }})
+                                      </q-item-section>
+                                    </q-item>
+                                    <q-separator />
+                                    <q-item 
+                                      v-for="room in diningRoomsStore.activeDiningRooms" 
+                                      :key="room.id" 
+                                      clickable 
+                                      v-ripple 
+                                      @click="form.setShiftDiningRoom(props.row.id, shift, room.id)"
+                                      :active="form.getEffectiveDiningRoom(props.row.id, shift) === room.id"
+                                      active-class="bg-teal-1 text-teal-10 text-weight-bold"
+                                    >
+                                      <q-item-section avatar style="min-width: 24px;">
+                                        <q-icon name="check" size="14px" v-if="form.getEffectiveDiningRoom(props.row.id, shift) === room.id" color="teal" />
+                                        <q-icon name="room" size="14px" v-else color="grey-6" />
+                                      </q-item-section>
+                                      <q-item-section class="text-caption">
+                                        {{ room.name }}
+                                      </q-item-section>
+                                    </q-item>
+                                  </q-list>
+                                </q-menu>
+                              </q-btn>
                             </div>
                             <div class="col-12">
                               <q-separator class="q-mb-xs q-mt-xs" />
@@ -418,7 +578,10 @@
         </q-card-section>
 
         <q-card-section class="q-pt-md">
-          <div class="text-subtitle1 q-mb-sm">Resumen de la solicitud para el <strong>{{ history.formatDate(form.requestSummary.value.date) }}</strong>:</div>
+          <div class="text-subtitle1 q-mb-sm">Resumen de la solicitud para <strong>{{ form.requestSummary.value.date }}</strong>:</div>
+          <div class="text-caption text-primary q-mb-sm" v-if="form.requestSummary.value.daysCount && form.requestSummary.value.daysCount > 1">
+            <q-icon name="info" /> Total calculado para {{ form.requestSummary.value.daysCount }} días seleccionados.
+          </div>
           <q-list bordered separator class="rounded-borders">
             <q-item v-for="(qty, shift) in form.requestSummary.value.shifts" :key="shift">
               <q-item-section>
@@ -504,6 +667,19 @@ function filterProxyDiners(val: string, update: (fn: () => void) => void) {
       (v: any) => v.name.toLowerCase().indexOf(needle) > -1 || v.cedula.toLowerCase().indexOf(needle) > -1
     )
   })
+}
+
+function getRoomFullName(roomId: number | null) {
+  if (!roomId) return 'Sin Asignar'
+  const found = diningRoomsStore.activeDiningRooms.find(r => r.id === roomId)
+  return found ? found.name : 'Sin Asignar'
+}
+
+function getRoomShortName(roomId: number | null) {
+  if (!roomId) return 'Default'
+  const found = diningRoomsStore.activeDiningRooms.find(r => r.id === roomId)
+  if (!found) return 'N/A'
+  return found.name.replace(/^Comedor\s+/i, '')
 }
 
 async function onSubmit() {

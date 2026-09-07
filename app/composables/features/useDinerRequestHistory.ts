@@ -14,23 +14,8 @@ export function useDinerRequestHistory() {
   const filterEndDate = ref(dayjs().add(1, 'day').format('YYYY-MM-DD'))
 
   const historyColumns = [
-    { name: 'batchCode', label: 'Lote / Solicitud', align: 'left', field: 'id', sortable: true },
-    { name: 'date', label: 'Fechas', align: 'left', field: (row: any) => {
-      const dates = Array.from(new Set(row.originalRequests.map((r: any) => formatDate(r.date))))
-      
-      // Si son más de 2 días, mostramos un resumen inteligente (Rango)
-      if (dates.length > 2) {
-        // Ordenamos para asegurarnos que tomamos el primero y el último correctos
-        const sortedDates = [...dates].sort((a: any, b: any) => {
-          const [d1, m1, y1] = a.split('/')
-          const [d2, m2, y2] = b.split('/')
-          return new Date(`${y1}-${m1}-${d1}`).getTime() - new Date(`${y2}-${m2}-${d2}`).getTime()
-        })
-        return `${sortedDates[0]} al ${sortedDates[sortedDates.length - 1]} (${dates.length} días)`
-      }
-      
-      return dates.join(', ')
-    }, sortable: true },
+    { name: 'batchCode', label: 'Lote / Solicitud', align: 'left', field: (row: any) => row.batchCode || row.id, sortable: true },
+    { name: 'date', label: 'Fecha', align: 'left', field: (row: any) => formatDate(row.date), sortable: true },
     { name: 'shiftType', label: 'Turnos', align: 'left', field: (row: any) => row.shiftTypes.join(', ') },
     { name: 'diningRoom', label: 'Comedor', align: 'left', field: 'diningRoom' },
     { name: 'status', label: 'Estado', align: 'center', field: 'status' },
@@ -42,12 +27,18 @@ export function useDinerRequestHistory() {
     const groups: Record<string, any> = {}
     
     store.requests.forEach(req => {
-      const key = req.batchCode || `SINGLE-${req.id}`
+      const dateStr = typeof req.date === 'string' ? req.date : req.date.toISOString()
+      const safeDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr
+      const batch = req.batchCode || `SINGLE-${req.id}`
+      
+      // Agrupamos individualmente por Día + Lote para permitir edición y cancelación independiente por fecha
+      const key = `${batch}__${safeDate}`
       
       if (!groups[key]) {
         groups[key] = {
           id: key,
-          date: req.date,
+          batchCode: req.batchCode || key,
+          date: safeDate,
           shiftTypes: [],
           diningRoom: req.diningRoom?.name || 'N/A',
           status: req.status,
@@ -73,6 +64,10 @@ export function useDinerRequestHistory() {
       const sourceReqs = group.isDeleted ? group.originalRequests : activeReqs
       
       group.shiftTypes = Array.from(new Set(sourceReqs.map((r: any) => r.shiftType)))
+      
+      const diningRooms = Array.from(new Set(sourceReqs.map((r: any) => r.diningRoom?.name).filter(Boolean)))
+      group.diningRoom = diningRooms.length > 0 ? diningRooms.join(', ') : (group.diningRoom || 'N/A')
+
       group.totalDiners = sourceReqs.reduce((sum: number, r: any) => {
         return sum + (r.details?.reduce((acc: number, d: any) => acc + (d.quantity || 1), 0) || 0)
       }, 0)
@@ -80,7 +75,7 @@ export function useDinerRequestHistory() {
       if (group.isDeleted) {
         group.status = 'DELETED'
       } else {
-        group.status = activeReqs[0].status
+        group.status = activeReqs[0]?.status || 'PENDING'
       }
     })
 
@@ -93,14 +88,14 @@ export function useDinerRequestHistory() {
 
   function confirmDelete(row: any) {
     $q.dialog({
-      title: 'Confirmar Baja de Lote',
-      message: `¿Está seguro que desea cancelar TODA la solicitud de lote para ${row.shiftTypes.join(', ')}? Esta acción cancelará ${row.originalRequests.length} peticiones.`,
+      title: 'Confirmar Baja de Solicitud',
+      message: `¿Está seguro que desea cancelar la solicitud del día ${formatDate(row.date)} para ${row.shiftTypes.join(', ')}? Esta acción cancelará ${row.originalRequests.length} peticiones de esta fecha.`,
       cancel: true,
       persistent: true
     }).onOk(async () => {
       try {
         await store.deleteRequestsBulk(row.rawIds)
-        notify.success('Lote de solicitudes cancelado exitosamente')
+        notify.success(`Solicitud del día ${formatDate(row.date)} cancelada exitosamente`)
       } catch (e: any) {
         notify.error(e.data?.statusMessage || 'Error al cancelar. Recuerde la hora límite.')
       }

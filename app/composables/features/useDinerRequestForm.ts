@@ -30,6 +30,28 @@ export function useDinerRequestForm() {
   const tableFilter = ref('')
   const masterChecks = ref<Record<string, boolean>>({})
   const dinerDiningRooms = ref<Record<string, number | null>>({})
+  // Comedor específico por turno para cada comensal: dinerShiftDiningRooms[dinerId][shiftType] = diningRoomId
+  const dinerShiftDiningRooms = ref<Record<string, Record<string, number | null>>>({})
+
+  function getDefaultDiningRoom(dinerId: string | number): number | null {
+    return dinerDiningRooms.value[dinerId] || filters.value.diningRoomId
+  }
+
+  function getEffectiveDiningRoom(dinerId: string | number, shift: string): number | null {
+    return dinerShiftDiningRooms.value[dinerId]?.[shift] || getDefaultDiningRoom(dinerId)
+  }
+
+  function hasCustomShiftRoom(dinerId: string | number, shift: string): boolean {
+    return !!dinerShiftDiningRooms.value[dinerId]?.[shift]
+  }
+
+  function setShiftDiningRoom(dinerId: string | number, shift: string, roomId: number | null) {
+    if (!dinerShiftDiningRooms.value[dinerId]) {
+      dinerShiftDiningRooms.value[dinerId] = {}
+    }
+    dinerShiftDiningRooms.value[dinerId][shift] = roomId
+    dinerShiftDiningRooms.value = { ...dinerShiftDiningRooms.value }
+  }
 
   // Nuevas variables para el modo Masivo (Mara)
   const bulkAuthorizedDinerId = ref<number | null>(null)
@@ -39,7 +61,7 @@ export function useDinerRequestForm() {
     dependencyId: authStore.user?.dependencyId || null as number | null,
     subdependencyId: authStore.user?.subdependencyId || null as number | null,
     squadId: null as number | null,
-    date: dayjs().add(1, 'day').format('YYYY-MM-DD'),
+    date: dayjs().add(settingsStore.minDaysAhead || 1, 'day').format('YYYY-MM-DD') as any,
     diningRoomId: null as number | null,
     observations: ''
   })
@@ -48,25 +70,64 @@ export function useDinerRequestForm() {
 
   const requestSummary = ref({
     date: '',
+    daysCount: 1,
     shifts: {} as Record<string, number>,
     total: 0
   })
   
   const formatToDDMMYYYY = (dateStr: string) => {
     if (!dateStr) return ''
-    const parts = dateStr.split('-')
+    const parts = dateStr.replace(/\//g, '-').split('-')
     if (parts.length !== 3) return dateStr
     return `${parts[2]}/${parts[1]}/${parts[0]}`
   }
 
+  const getDatesArray = (dateVal: any): string[] => {
+    if (!dateVal) return []
+    if (typeof dateVal === 'string') {
+      return [dateVal.replace(/\//g, '-')]
+    }
+    if (typeof dateVal === 'object' && dateVal.from && dateVal.to) {
+      const fromStr = dateVal.from.replace(/\//g, '-')
+      const toStr = dateVal.to.replace(/\//g, '-')
+      let start = dayjs(fromStr)
+      let end = dayjs(toStr)
+      if (end.isBefore(start)) {
+        const temp = start
+        start = end
+        end = temp
+      }
+      const daysCount = end.diff(start, 'day')
+      const result: string[] = []
+      for (let i = 0; i <= daysCount; i++) {
+        result.push(start.add(i, 'day').format('YYYY-MM-DD'))
+      }
+      return result
+    }
+    return []
+  }
+
+  const selectedDatesArray = computed(() => {
+    return getDatesArray(filters.value.date)
+  })
+
   const updateDateText = () => {
-    formDateText.value = formatToDDMMYYYY(filters.value.date)
+    const dates = selectedDatesArray.value
+    if (dates.length === 0) {
+      formDateText.value = ''
+    } else if (dates.length === 1) {
+      formDateText.value = formatToDDMMYYYY(dates[0])
+    } else {
+      const first = formatToDDMMYYYY(dates[0])
+      const last = formatToDDMMYYYY(dates[dates.length - 1])
+      formDateText.value = `${first} al ${last} (${dates.length} días)`
+    }
   }
   updateDateText()
 
   watch(() => filters.value.date, () => {
     updateDateText()
-  })
+  }, { deep: true })
 
   const allowedDates = (dateStr: string) => {
     const isBypass = authStore.user?.role?.permissions?.some(p => 
@@ -74,12 +135,18 @@ export function useDinerRequestForm() {
     )
 
     // Si el usuario tiene permisos de bypass global (ADMIN), permitimos cualquier fecha (true)
+    // Esto le permite al Administrador registrar comidas históricas o cualquier fecha futura
     if (isBypass) return true
     
-    // Por petición explícita, SOLO se permite seleccionar EXACTAMENTE el día de mañana (1 día de anticipación)
-    const targetDate = dayjs(dateStr, 'YYYY/MM/DD').startOf('day')
-    const tomorrow = dayjs().add(1, 'day').startOf('day')
-    return targetDate.isSame(tomorrow, 'day')
+    // Usuario No-Admin: Solo se muestran disponibles los días a partir de la fecha diaria
+    // y las demás fechas pasadas o mayores a 5 días quedan deshabilitadas (disabled)
+    const targetDate = dayjs(dateStr.replace(/\//g, '-')).startOf('day')
+    const minDays = settingsStore.minDaysAhead || 1
+    const startDate = dayjs().add(minDays, 'day').startOf('day')
+    const diff = targetDate.diff(startDate, 'day')
+    
+    // Exactamente 5 días disponibles a partir de la fecha diaria (diff de 0 a 4)
+    return diff >= 0 && diff <= 4
   }
 
   // Si cambia el comedor global, asignarlo a todos los comensales actuales como atajo
@@ -91,6 +158,12 @@ export function useDinerRequestForm() {
   })
 
   const activeShifts = computed(() => {
+    // Si estamos consultando (Ver) o editando (Editar) una solicitud existente,
+    // debemos mostrar TODOS los turnos activos del sistema para no ocultar datos guardados
+    if (isViewMode.value || isEditMode.value) {
+      return schedulesStore.schedules.filter(s => s.active).map(s => s.shiftType)
+    }
+
     // Cutoff Engine Logic
     let isBypass = false
 
@@ -104,11 +177,15 @@ export function useDinerRequestForm() {
       return schedulesStore.schedules.filter(s => s.active).map(s => s.shiftType)
     }
 
-    // Normal Cutoff Check
-    const start = dayjs(filters.value.date).startOf('day')
+    // Normal Cutoff Check sobre la fecha más temprana del rango
+    const dates = selectedDatesArray.value
+    const firstDateStr = dates.length > 0 ? dates[0] : ''
+    if (!firstDateStr) return schedulesStore.schedules.filter(s => s.active).map(s => s.shiftType)
+
+    const start = dayjs(firstDateStr).startOf('day')
     const now = dayjs()
     const diffDays = start.diff(now.startOf('day'), 'day')
-    const minDays = settingsStore.minDaysAhead
+    const minDays = settingsStore.minDaysAhead || 1
     const cutoff = settingsStore.cutoffTime
 
     if (diffDays < minDays) return [] // Completely blocked
@@ -264,17 +341,19 @@ export function useDinerRequestForm() {
   }
 
   function refreshGrid() {
-    const targetDep = filters.value.dependencyId
+    const targetDep = filters.value.dependencyId || authStore.user?.dependencyId
     const targetSubd = filters.value.subdependencyId
     const targetSquad = filters.value.squadId
   
-    // Si no hay Dependencia seleccionada y tampoco subdependencia ni cuadrilla, vaciamos
+    // Si no hay Dependencia seleccionada y tampoco subdependencia ni cuadrilla, vaciamos (salvo en edición si ya hay comensales)
     if (!targetDep && !targetSubd && !targetSquad) {
-      loadedDiners.value = []
-      return
+      if (!isEditMode.value) {
+        loadedDiners.value = []
+        return
+      }
     }
   
-    let filtered = dinersStore.diners
+    let filtered = dinersStore.diners || []
 
     // Si el usuario no es global y tiene subdependencias asignadas, limitamos a sus subdependencias autorizadas
     const userSubIds: number[] = authStore.user?.subdependencies?.map((s: any) => s.id) || (authStore.user?.subdependencyId ? [authStore.user.subdependencyId] : [])
@@ -289,9 +368,45 @@ export function useDinerRequestForm() {
       filtered = filtered.filter(d => d.squadId === targetSquad)
     }
   
-    loadedDiners.value = [...filtered]
+    if (isEditMode.value) {
+      // 1. Identificar comensales que tienen al menos un turno marcado activo en gridState
+      const checkedDinerIds = new Set(
+        Object.keys(gridState.value).filter(id => {
+          const state = gridState.value[id]
+          return state && Object.values(state).some(v => v === true)
+        }).map(id => isNaN(Number(id)) ? id : Number(id))
+      )
+
+      // 2. Extraer comensales que ya estaban seleccionados para que permanezcan arriba de primero
+      const existingCheckedDiners = loadedDiners.value.filter(d => checkedDinerIds.has(d.id))
+
+      const combinedMap = new Map()
+      // Primero agregamos los seleccionados (se mostrarán arriba de primero)
+      existingCheckedDiners.forEach(d => combinedMap.set(d.id, d))
+
+      // Luego agregamos los comensales disponibles de la búsqueda/cuadrilla (se mostrarán debajo)
+      filtered.forEach(d => {
+        if (!combinedMap.has(d.id)) {
+          combinedMap.set(d.id, d)
+        }
+      })
+
+      loadedDiners.value = Array.from(combinedMap.values())
+    } else {
+      loadedDiners.value = [...filtered]
+      resetMasterChecks()
+    }
+
     initGridStateForDiners(loadedDiners.value, activeShifts.value)
-    resetMasterChecks()
+
+    // Si hay un comedor general asignado, asegurar que cada comensal lo tenga por defecto
+    if (filters.value.diningRoomId) {
+      loadedDiners.value.forEach(d => {
+        if (!dinerDiningRooms.value[d.id]) {
+          dinerDiningRooms.value[d.id] = filters.value.diningRoomId
+        }
+      })
+    }
   }
 
   watch([() => filters.value.subdependencyId, () => filters.value.squadId, () => filters.value.dependencyId], async () => {
@@ -318,8 +433,8 @@ export function useDinerRequestForm() {
     filters.value.squadId = null
     filters.value.diningRoomId = null
     
-    // Por regla de negocio, siempre inicializamos en MAÑANA
-    filters.value.date = dayjs().add(1, 'day').format('YYYY-MM-DD')
+    // Por regla de negocio, siempre inicializamos en la fecha de anticipación configurada (ej: mañana)
+    filters.value.date = dayjs().add(settingsStore.minDaysAhead || 1, 'day').format('YYYY-MM-DD')
     
     filters.value.observations = ''
     tableFilter.value = ''
@@ -327,6 +442,7 @@ export function useDinerRequestForm() {
     gridState.value = {}
     quantities.value = {}
     dinerDiningRooms.value = {}
+    dinerShiftDiningRooms.value = {}
     
     // Reset Masivo
     bulkAuthorizedDinerId.value = null
@@ -348,35 +464,42 @@ export function useDinerRequestForm() {
     refreshGrid()
   }
 
-  function loadExistingData(dateGroup: any, editMode: boolean = false) {
+  async function loadExistingData(dateGroup: any, editMode: boolean = false) {
     isLoadingData.value = true
     clearForm()
     isViewMode.value = !editMode
     isEditMode.value = editMode
-    currentBatchCode.value = dateGroup.id || null
+    currentBatchCode.value = dateGroup.batchCode || dateGroup.id || null
     isOpen.value = true
 
-    const safeDate = typeof dateGroup.date === 'string' && dateGroup.date.includes('T') ? dateGroup.date.split('T')[0] : dateGroup.date
-    filters.value.date = safeDate
-
-    const firstReq = dateGroup.originalRequests[0]
-    
-    // Si queremos sacar la fecha desde firstReq por seguridad:
-    const reqDate = typeof firstReq.date === 'string' && firstReq.date.includes('T') ? firstReq.date.split('T')[0] : firstReq.date
-    filters.value.date = reqDate ? reqDate : dayjs().format('YYYY-MM-DD')
-    
-    filters.value.diningRoomId = firstReq.diningRoomId
-    
-    // Si queremos que los dropdowns superiores (Dependencia/Cuadrilla) tengan sentido,
-    // podríamos buscar el diner y usar su dependencia. Pero en modo vista global,
-    // es mejor dejar esos filtros vacíos o poner los del usuario creador.
-    
-    const dinersMap = new Map()
-    
     // IMPORTANTE: Filtrar y cargar solo las solicitudes que NO están eliminadas,
     // EXCEPTO si el lote entero está eliminado (modo auditoría para admins).
-    const activeRequests = dateGroup.originalRequests.filter((req: any) => req.deletedAt === null)
-    const sourceRequests = activeRequests.length > 0 ? activeRequests : dateGroup.originalRequests
+    const activeRequests = (dateGroup.originalRequests || []).filter((req: any) => req.deletedAt === null)
+    const sourceRequests = activeRequests.length > 0 ? activeRequests : (dateGroup.originalRequests || [])
+
+    const rawDates = sourceRequests.map((r: any) => {
+      const d = r.date
+      return typeof d === 'string' && d.includes('T') ? d.split('T')[0] : d
+    }).filter(Boolean)
+    const uniqueDates = Array.from(new Set(rawDates)).sort()
+
+    if (uniqueDates.length === 1) {
+      filters.value.date = uniqueDates[0]
+    } else if (uniqueDates.length > 1) {
+      filters.value.date = {
+        from: uniqueDates[0],
+        to: uniqueDates[uniqueDates.length - 1]
+      }
+    } else {
+      const safeDate = typeof dateGroup.date === 'string' && dateGroup.date.includes('T') ? dateGroup.date.split('T')[0] : dateGroup.date
+      filters.value.date = safeDate || dayjs().format('YYYY-MM-DD')
+    }
+
+    const firstReq = sourceRequests[0] || {}
+    filters.value.diningRoomId = firstReq.diningRoomId || null
+    filters.value.observations = firstReq.observations || ''
+    
+    const dinersMap = new Map()
     
     sourceRequests.forEach((req: any) => {
       const shift = req.shiftType
@@ -421,6 +544,11 @@ export function useDinerRequestForm() {
 
         quantities.value[dinerId] = d.quantity || 1
         dinerDiningRooms.value[dinerId] = reqDiningRoomId
+
+        if (!dinerShiftDiningRooms.value[dinerId]) {
+          dinerShiftDiningRooms.value[dinerId] = {}
+        }
+        dinerShiftDiningRooms.value[dinerId][shift] = reqDiningRoomId
       })
     })
     
@@ -428,20 +556,46 @@ export function useDinerRequestForm() {
     
     // Auto-completar los selectores de Dependencia y Subdependencia
     if (firstReq && firstReq.targetSubdependency) {
-      // Si es un retiro Masivo (o alguien guardA3 la subdependencia destino en la tabla),
-      // respetamos esa subdependencia explA-citamente!
+      // Si es un retiro Masivo (o alguien guardó la subdependencia destino en la tabla),
+      // respetamos esa subdependencia explícitamente!
       filters.value.dependencyId = firstReq.targetSubdependency.dependencyId || null
       filters.value.subdependencyId = firstReq.targetSubdependency.id || null
     } else if (loadedDiners.value.length > 0) {
-      // Fallback a la antigua heurA-stica (primer comensal de la lista)
+      // Fallback a la heurística del primer comensal con dependencia
       const firstDiner = loadedDiners.value.find(d => d.dependencyId)
       if (firstDiner) {
         filters.value.dependencyId = firstDiner.dependencyId || null
         filters.value.subdependencyId = firstDiner.subdependencyId || null
       }
     }
+
+    if (!filters.value.dependencyId) {
+      filters.value.dependencyId = authStore.user?.dependencyId || null
+    }
+    if (!filters.value.subdependencyId) {
+      const userSubIds: number[] = authStore.user?.subdependencies?.map((s: any) => s.id) || (authStore.user?.subdependencyId ? [authStore.user.subdependencyId] : [])
+      filters.value.subdependencyId = userSubIds.length === 1 ? userSubIds[0] : null
+    }
+
+    // Si todos los comensales de la solicitud pertenecen a una misma cuadrilla, fijamos ese filtro
+    const squadIds = Array.from(new Set(loadedDiners.value.map(d => d.squadId).filter(Boolean)))
+    if (squadIds.length === 1) {
+      filters.value.squadId = squadIds[0] as number
+    } else {
+      filters.value.squadId = null
+    }
+
+    if (editMode) {
+      // Cargar el catálogo completo de la dependencia para permitir agregar compañeros
+      if (filters.value.dependencyId) {
+        await dinersStore.fetchAll({ dependencyId: filters.value.dependencyId })
+      }
+      refreshGrid()
+    }
     
     gridState.value = { ...gridState.value } // Forzar actualización reactiva profunda en Vue 3
+    masterChecks.value = { ...masterChecks.value }
+    bulkQuantities.value = { ...bulkQuantities.value }
     isOpen.value = true
     
     // Desactivamos la bandera después de que los watchers asíncronos de Vue se hayan disparado
@@ -456,10 +610,13 @@ export function useDinerRequestForm() {
       return false
     }
 
-    // Reset summary
+    const dates = selectedDatesArray.value
+    const daysCount = dates.length || 1
+
     requestSummary.value = {
-      date: filters.value.date,
-      shifts: {},
+      date: formDateText.value,
+      daysCount: daysCount,
+      shifts: {} as Record<string, number>,
       total: 0
     }
 
@@ -475,8 +632,9 @@ export function useDinerRequestForm() {
             notify.warning(`La cantidad de platos para ${shift} debe ser mayor a 0`)
             return false
           }
-          requestSummary.value.shifts[shift] = qty
-          requestSummary.value.total += qty
+          const shiftTotal = qty * daysCount
+          requestSummary.value.shifts[shift] = shiftTotal
+          requestSummary.value.total += shiftTotal
         }
       }
     } else {
@@ -488,8 +646,9 @@ export function useDinerRequestForm() {
         for (const d of dinersForShift) {
           portions += (quantities.value[d.id] || 1)
         }
-        requestSummary.value.shifts[shift] = portions
-        requestSummary.value.total += portions
+        const shiftTotal = portions * daysCount
+        requestSummary.value.shifts[shift] = shiftTotal
+        requestSummary.value.total += shiftTotal
       }
     }
 
@@ -502,8 +661,19 @@ export function useDinerRequestForm() {
   }
 
   async function executeSubmit() {
+    const datesArray: string[] = selectedDatesArray.value
+    if (datesArray.length === 0) {
+      notify.warning('Debe seleccionar al menos una fecha válida.')
+      return false
+    }
 
-    let datesArray: string[] = [dayjs(filters.value.date).format('YYYY-MM-DD')]
+    const isBypass = authStore.user?.role?.permissions?.some(p => 
+      p.module.code === 'GLOBAL_ACCESS' && (p.canUpdate || p.canRead)
+    )
+    if (!isBypass && datesArray.length > 5) {
+      notify.warning('El rango máximo permitido para solicitudes es de 5 días.')
+      return false
+    }
 
     loading.value = true
     let successCount = 0
@@ -535,7 +705,7 @@ export function useDinerRequestForm() {
           if (dinersForShift.length === 0) continue
 
           for (const d of dinersForShift) {
-            const dRoomId = dinerDiningRooms.value[d.id] || filters.value.diningRoomId
+            const dRoomId = getEffectiveDiningRoom(d.id, shift)
             if (!dRoomId) {
               missingDiningRoom = true
               break
@@ -665,6 +835,15 @@ export function useDinerRequestForm() {
           const dinersForShift = selectedDiners.filter(d => gridState.value[d.id][shift])
           if (dinersForShift.length === 0) continue
 
+          for (const d of dinersForShift) {
+            const dRoomId = getEffectiveDiningRoom(d.id, shift)
+            if (!dRoomId) {
+              notify.warning(`Hay comensales sin comedor asignado para el turno de ${shift}`)
+              loading.value = false
+              return
+            }
+          }
+
           // Separar en dos grupos: normales (DINE_IN) y masivos (TAKE_AWAY)
           // Cada grupo genera un DinerRequest independiente bajo el mismo batchCode
           const normalDiners = dinersForShift.filter(d => !gridState.value[d.id]['MASIVO'])
@@ -677,7 +856,7 @@ export function useDinerRequestForm() {
                 id: d.id,
                 quantity: d.quantity || 1,
                 modality: 'DINE_IN',
-                diningRoomId: dinerDiningRooms.value[d.id] || filters.value.diningRoomId
+                diningRoomId: getEffectiveDiningRoom(d.id, shift)
               }))
             })
           }
@@ -688,17 +867,17 @@ export function useDinerRequestForm() {
                 id: d.id,
                 quantity: d.quantity || 1,
                 modality: 'TAKE_AWAY',
-                diningRoomId: dinerDiningRooms.value[d.id] || filters.value.diningRoomId
+                diningRoomId: getEffectiveDiningRoom(d.id, shift)
               }))
             })
           }
         }
       }
 
-      const formattedDate = dayjs(filters.value.date).format('YYYY-MM-DD')
+      const datesArray = selectedDatesArray.value
       
       const payload = {
-        dates: [formattedDate],
+        dates: datesArray.length > 0 ? datesArray : [dayjs(filters.value.date).format('YYYY-MM-DD')],
         targetSubdependencyId: filters.value.subdependencyId,
         diningRoomId: filters.value.diningRoomId,
         shifts: shiftsPayload
@@ -719,10 +898,16 @@ export function useDinerRequestForm() {
   return {
     loading,
     filters,
+    selectedDatesArray,
     loadedDiners,
     gridState,
     quantities,
     dinerDiningRooms,
+    dinerShiftDiningRooms,
+    getDefaultDiningRoom,
+    getEffectiveDiningRoom,
+    hasCustomShiftRoom,
+    setShiftDiningRoom,
     tableFilter,
     masterChecks,
     formDateText,

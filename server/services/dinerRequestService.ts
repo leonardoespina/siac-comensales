@@ -42,22 +42,25 @@ export const dinerRequestService = {
     const formattedCutoff = dayjs().hour(cutoff.hours).minute(cutoff.minutes).format('hh:mm A')
 
     if (action === 'CREATE' || action === 'UPDATE_GENERAL' || action === 'DELETE') {
-      // Regla estricta: Únicamente el día siguiente a la fecha actual (1 día de anticipación)
-      if (diffDays !== minDaysAhead) {
+      const maxDaysAhead = minDaysAhead + 4 // Ventana permitida de hasta 5 días a partir de la fecha diaria
+      if (diffDays < minDaysAhead || diffDays > maxDaysAhead) {
         throw new DomainError(
-          `Las solicitudes o sus modificaciones generales solo pueden hacerse para exactamente ${minDaysAhead} día(s) siguiente(s). (Diferencia actual: ${diffDays} días)`,
+          `Las solicitudes o sus modificaciones generales solo pueden realizarse desde ${minDaysAhead} hasta un máximo de ${maxDaysAhead} días de anticipación. (Diferencia actual: ${diffDays} días)`,
           'TIME_RULE_VIOLATION',
           403
         )
       }
       
-      // La regla de corte: Hasta la hora límite configurada del día previo.
-      if (now.hour() > cutoff.hours || (now.hour() === cutoff.hours && now.minute() >= cutoff.minutes)) {
-        throw new DomainError(
-          `El tiempo límite para crear, editar o anular solicitudes venció a las ${formattedCutoff} del día previo.`,
-          'TIME_RULE_VIOLATION',
-          403
-        )
+      // La regla de corte: Si la fecha objetivo corresponde a la fecha más próxima (minDaysAhead),
+      // se debe verificar que no haya vencido la hora de corte de la jornada previa.
+      if (diffDays === minDaysAhead) {
+        if (now.hour() > cutoff.hours || (now.hour() === cutoff.hours && now.minute() >= cutoff.minutes)) {
+          throw new DomainError(
+            `El tiempo límite para crear, editar o anular solicitudes para la fecha ${targetDateStr} venció a las ${formattedCutoff} del día previo.`,
+            'TIME_RULE_VIOLATION',
+            403
+          )
+        }
       }
     } else if (action === 'EMERGENCY_ROOM_CHANGE') {
       // Excepción por emergencia: Cambio de comedor de destino.
@@ -224,8 +227,13 @@ export const dinerRequestService = {
       })
       if (req) requestsToUpdate.push(req)
     } else {
+      const whereClause: any = { batchCode: batchOrId, deletedAt: null }
+      if (data.dates && data.dates.length > 0) {
+        const targetDates = data.dates.map(d => new Date(`${d}T00:00:00.000Z`))
+        whereClause.date = { in: targetDates }
+      }
       requestsToUpdate = await prisma.dinerRequest.findMany({
-        where: { batchCode: batchOrId, deletedAt: null },
+        where: whereClause,
         include: { details: true }
       })
     }
