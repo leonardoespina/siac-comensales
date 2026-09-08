@@ -1,8 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { useAuthStore } from '~/stores/auth'
-
-const auth = useAuthStore()
+import { ref, watch } from 'vue'
 
 // State
 const cedulaSearch = ref('')
@@ -10,11 +7,8 @@ const diningRoomId = ref<number | null>(null)
 const observations = ref('')
 
 const loadingSearch = ref(false)
-const loadingAssociated = ref(false)
 const dispatchingShift = ref<string | null>(null)
 const contextData = ref<any>(null)
-const associatedDiners = ref<any[]>([])
-const filteredDinerOptions = ref<any[]>([])
 
 const searchError = ref('')
 const actionMessage = ref('')
@@ -32,69 +26,13 @@ watch(diningRooms, (rooms) => {
   }
 }, { immediate: true })
 
-// Load associated diners when diningRoomId changes
-const fetchAssociatedDiners = async () => {
-  if (!diningRoomId.value) {
-    associatedDiners.value = []
-    filteredDinerOptions.value = []
-    return
-  }
-
-  loadingAssociated.value = true
-  try {
-    const res = await $fetch<any>('/api/dispatch/diner-context', {
-      params: { diningRoomId: diningRoomId.value }
-    })
-    associatedDiners.value = res.diners || []
-    filteredDinerOptions.value = associatedDiners.value.map(d => ({
-      label: `V-${d.cedula} - ${d.name} (${d.dependencyName})`,
-      value: d.cedula,
-      diner: d
-    }))
-  } catch (err) {
-    console.error('Error cargando comensales del comedor:', err)
-  } finally {
-    loadingAssociated.value = false
-  }
-}
-
 watch(diningRoomId, () => {
-  fetchAssociatedDiners()
   contextData.value = null
   cedulaSearch.value = ''
 })
 
-const filterDiners = (val: string, update: Function) => {
-  if (val === '') {
-    update(() => {
-      filteredDinerOptions.value = associatedDiners.value.map(d => ({
-        label: `V-${d.cedula} - ${d.name} (${d.dependencyName})`,
-        value: d.cedula,
-        diner: d
-      }))
-    })
-    return
-  }
-
-  update(() => {
-    const needle = val.toLowerCase()
-    filteredDinerOptions.value = associatedDiners.value
-      .filter(d => d.cedula.toLowerCase().includes(needle) || d.name.toLowerCase().includes(needle))
-      .map(d => ({
-        label: `V-${d.cedula} - ${d.name} (${d.dependencyName})`,
-        value: d.cedula,
-        diner: d
-      }))
-  })
-}
-
-const selectDiner = (dinerCedula: string) => {
-  cedulaSearch.value = dinerCedula
-  onSearch()
-}
-
 const onSearch = async () => {
-  if (!cedulaSearch.value) return
+  if (!cedulaSearch.value.trim()) return
 
   loadingSearch.value = true
   searchError.value = ''
@@ -104,9 +42,13 @@ const onSearch = async () => {
 
   try {
     const res = await $fetch('/api/dispatch/diner-context', {
-      params: { cedula: cedulaSearch.value }
+      params: { cedula: cedulaSearch.value.trim() }
     })
     contextData.value = res
+    // Normalizar con la cédula real del comensal encontrado
+    if (res.diner?.cedula) {
+      cedulaSearch.value = res.diner.cedula
+    }
   } catch (err: any) {
     searchError.value = err.data?.statusMessage || err.message || 'Error desconocido'
   } finally {
@@ -134,17 +76,15 @@ const onDispatch = async (shift: string) => {
         observations: observations.value
       }
     })
-    
+
     actionMessage.value = res.message
-    
-    // Refresh context silently and reload associated list
+    observations.value = ''
+
     const refreshRes = await $fetch('/api/dispatch/diner-context', {
       params: { cedula: cedulaSearch.value }
     })
     contextData.value = refreshRes
-    observations.value = ''
-    await fetchAssociatedDiners()
-    
+
   } catch (err: any) {
     actionError.value = err.data?.statusMessage || err.message || 'Error desconocido'
   } finally {
@@ -154,15 +94,15 @@ const onDispatch = async (shift: string) => {
 
 const getShiftStatus = (shift: string) => {
   if (!contextData.value) return { code: 'NONE', label: 'Sin solicitud', color: 'grey-5', icon: 'remove_circle_outline' }
-  
+
   const req = contextData.value.requests.find((r: any) => r.request.shiftType === shift)
   if (!req) return { code: 'NONE', label: 'Sin solicitud', color: 'grey-5', icon: 'help_outline' }
-  
+
   if (req.dispatchedAt) {
     const time = new Date(req.dispatchedAt).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })
     return { code: 'DISPATCHED', label: `Retirado (${time})`, color: 'positive', icon: 'check_circle' }
   }
-  
+
   return { code: 'PENDING', label: 'Pendiente', color: 'warning', icon: 'pending_actions' }
 }
 </script>
@@ -208,37 +148,21 @@ const getShiftStatus = (shift: string) => {
           <q-card-section>
             <form @submit.prevent="onSearch" class="row q-col-gutter-md items-center">
               <div class="col-12 col-sm-8 col-md-9">
-                <q-select
+                <q-input
                   v-model="cedulaSearch"
-                  :options="filteredDinerOptions"
-                  option-value="value"
-                  option-label="label"
-                  emit-value
-                  map-options
-                  use-input
-                  hide-selected
-                  fill-input
-                  input-debounce="300"
-                  @filter="filterDiners"
-                  @update:model-value="onSearch"
-                  label="Buscar por Cédula o Nombre del Comensal *"
+                  label="Cédula del Comensal *"
                   outlined
                   dense
                   bg-color="white"
-                  :loading="loadingSearch || loadingAssociated"
-                  hint="Escriba la cédula/nombre o seleccione de la lista del comedor"
+                  :loading="loadingSearch"
+                  clearable
+                  autofocus
+                  @keyup.enter="onSearch"
                 >
                   <template v-slot:prepend>
                     <q-icon name="person_search" color="primary" />
                   </template>
-                  <template v-slot:no-option>
-                    <q-item>
-                      <q-item-section class="text-grey">
-                        {{ diningRoomId ? 'No hay comensales encontrados para la búsqueda' : 'Seleccione un Comedor de Operación primero' }}
-                      </q-item-section>
-                    </q-item>
-                  </template>
-                </q-select>
+                </q-input>
               </div>
               <div class="col-12 col-sm-4 col-md-3">
                 <q-btn
@@ -249,34 +173,10 @@ const getShiftStatus = (shift: string) => {
                   class="full-width"
                   size="md"
                   :disable="!cedulaSearch"
+                  :loading="loadingSearch"
                 />
               </div>
             </form>
-
-            <!-- Acceso Rápido: Comensales Asignados Hoy en este Comedor -->
-            <div v-if="diningRoomId && associatedDiners.length > 0" class="q-mt-md">
-              <div class="text-caption text-grey-8 q-mb-xs row items-center">
-                <q-icon name="groups" class="q-mr-xs" color="primary" />
-                <span>Comensales asociados hoy a este comedor ({{ associatedDiners.length }}):</span>
-              </div>
-              <div class="row q-gutter-xs">
-                <q-chip
-                  v-for="diner in associatedDiners.slice(0, 8)"
-                  :key="diner.id"
-                  clickable
-                  color="blue-1"
-                  text-color="primary"
-                  icon="person"
-                  size="sm"
-                  @click="selectDiner(diner.cedula)"
-                >
-                  {{ diner.name.split(' ')[0] }} ({{ diner.cedula }})
-                </q-chip>
-                <q-chip v-if="associatedDiners.length > 8" size="sm" color="grey-3" text-color="grey-8">
-                  +{{ associatedDiners.length - 8 }} más
-                </q-chip>
-              </div>
-            </div>
 
             <q-banner v-if="searchError" class="bg-negative text-white q-mt-md rounded-borders">
               <template v-slot:avatar>
