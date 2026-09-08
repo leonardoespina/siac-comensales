@@ -14,6 +14,16 @@ export async function findMassiveRequests(diningRoomId: number | undefined, date
   const startOfDay = new Date(`${dateStr}T00:00:00.000Z`)
   const endOfDay = new Date(`${dateStr}T23:59:59.999Z`)
 
+  // El campo targetSubdependencyId está directamente en DinerRequest.
+  // Filtrar por él es directo, eficiente y semánticamente correcto.
+  // No es necesario navegar por details.diner.subdependencyId.
+  const requestFilter: Record<string, unknown> = {}
+  if (subdependencyId) {
+    requestFilter.targetSubdependencyId = subdependencyId
+  } else if (dependencyId) {
+    requestFilter.targetSubdependency = { dependencyId }
+  }
+
   const massiveRequests = await prisma.dinerRequest.findMany({
     where: {
       diningRoomId,
@@ -23,14 +33,9 @@ export async function findMassiveRequests(diningRoomId: number | undefined, date
       },
       status: 'APPROVED',
       deletedAt: null,
+      ...requestFilter,
       details: {
-        some: {
-          modality: 'TAKE_AWAY',
-          diner: {
-            subdependencyId: subdependencyId || undefined,
-            subdependency: dependencyId ? { dependencyId: dependencyId } : undefined
-          }
-        }
+        some: { modality: 'TAKE_AWAY' }
       }
     },
     include: {
@@ -46,6 +51,7 @@ export async function findMassiveRequests(diningRoomId: number | undefined, date
 
   return massiveRequests
 }
+
 
 export async function getMassiveRequestById(batchId: number) {
   return await prisma.dinerRequest.findUnique({
