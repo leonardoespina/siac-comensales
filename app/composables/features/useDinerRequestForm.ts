@@ -478,13 +478,27 @@ export function useDinerRequestForm() {
     clearForm()
     isViewMode.value = !editMode
     isEditMode.value = editMode
-    currentBatchCode.value = dateGroup.batchCode || dateGroup.id || null
+    const batchCode = dateGroup.batchCode || dateGroup.id || null
+    currentBatchCode.value = batchCode
     isOpen.value = true
 
-    // IMPORTANTE: Filtrar y cargar solo las solicitudes que NO están eliminadas,
-    // EXCEPTO si el lote entero está eliminado (modo auditoría para admins).
-    const activeRequests = (dateGroup.originalRequests || []).filter((req: any) => req.deletedAt === null)
-    const sourceRequests = activeRequests.length > 0 ? activeRequests : (dateGroup.originalRequests || [])
+    // IMPORTANTE: Consultar el lote completo directamente del backend para garantizar
+    // que se incluyan todos los turnos (desayuno, almuerzo, cena, sobrecena) y comedores
+    // sin importar si la tabla principal tenía un filtro activo de sede.
+    let sourceRequests = (dateGroup.originalRequests || []).filter((req: any) => req.deletedAt === null)
+    if (batchCode) {
+      try {
+        const fullBatch = await $fetch<any[]>(`/api/diner-requests/${batchCode}`)
+        if (fullBatch && fullBatch.length > 0) {
+          sourceRequests = fullBatch
+        }
+      } catch (err) {
+        console.warn('Fallback a datos de la fila:', err)
+      }
+    }
+    if (sourceRequests.length === 0 && dateGroup.originalRequests?.length > 0) {
+      sourceRequests = dateGroup.originalRequests
+    }
 
     const rawDates = sourceRequests.map((r: any) => {
       const d = r.date
@@ -552,12 +566,15 @@ export function useDinerRequestForm() {
         }
 
         quantities.value[dinerId] = d.quantity || 1
-        dinerDiningRooms.value[dinerId] = reqDiningRoomId
+        dinerDiningRooms.value[dinerId] = reqDiningRoomId || firstReq.diningRoomId || null
 
         if (!dinerShiftDiningRooms.value[dinerId]) {
           dinerShiftDiningRooms.value[dinerId] = {}
         }
-        dinerShiftDiningRooms.value[dinerId][shift] = reqDiningRoomId
+        // Solo se registra como turno personalizado si difiere explícitamente del comedor base
+        dinerShiftDiningRooms.value[dinerId][shift] = (reqDiningRoomId && reqDiningRoomId !== firstReq.diningRoomId)
+          ? reqDiningRoomId
+          : null
       })
     })
     

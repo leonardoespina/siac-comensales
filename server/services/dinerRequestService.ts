@@ -96,6 +96,10 @@ export const dinerRequestService = {
     return dinerRequestRepository.findAllByDateRange(start, end, dependencyId, subdependencyIds, isAdmin, siteIds)
   },
 
+  async getBatchDetails(batchOrId: string) {
+    return dinerRequestRepository.findByBatchOrId(batchOrId)
+  },
+
   async createRequests(data: { 
     dates: string[], 
     shiftType: string, 

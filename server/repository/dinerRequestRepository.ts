@@ -77,6 +77,35 @@ export const dinerRequestRepository = {
     })
   },
 
+  async findByBatchOrId(batchOrId: string) {
+    const isSingle = batchOrId.startsWith('SINGLE-')
+    const whereClause: any = isSingle
+      ? { id: parseInt(batchOrId.replace('SINGLE-', '')), deletedAt: null }
+      : { batchCode: batchOrId, deletedAt: null }
+
+    return prisma.dinerRequest.findMany({
+      where: whereClause,
+      include: {
+        createdBy: { select: { name: true, cedula: true } },
+        diningRoom: { 
+          select: { 
+            id: true, 
+            name: true, 
+            siteId: true, 
+            site: { select: { id: true, name: true } } 
+          } 
+        },
+        targetSubdependency: { select: { id: true, dependencyId: true } },
+        details: {
+          include: {
+            diner: { select: { cedula: true, name: true, rationType: true, subdependencyId: true, squadId: true, subdependency: { select: { dependencyId: true } } } }
+          }
+        }
+      },
+      orderBy: { shiftType: 'asc' }
+    })
+  },
+
   async findOverlappingDiners(date: Date, shiftType: string, dinerIds: number[]) {
     // Busca detalles de peticiones individuales (DINE_IN) existentes para los comensales dados en el día y turno específicos.
     // IGNORA las solicitudes que han sido eliminadas lógicamente (Soft Delete) y las autorizaciones masivas (TAKE_AWAY).
