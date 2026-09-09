@@ -112,7 +112,10 @@ export async function generateSummaryReport(filters: any, user: any) {
     throw new DomainError('Debe especificar un rango de fechas para el reporte', 400, 'BAD_REQUEST')
   }
 
-  const groupBy: 'DEPENDENCY' | 'SUBDEPENDENCY' = filters.groupBy === 'SUBDEPENDENCY' ? 'SUBDEPENDENCY' : 'DEPENDENCY'
+  const groupBy: 'DEPENDENCY' | 'SUBDEPENDENCY' | 'SITE' =
+    filters.groupBy === 'SUBDEPENDENCY' ? 'SUBDEPENDENCY'
+    : filters.groupBy === 'SITE' ? 'SITE'
+    : 'DEPENDENCY'
 
   const parsedFilters: reportRepo.MasterReportFilters = {
     dateFrom: new Date(filters.dateFrom),
@@ -145,6 +148,8 @@ export async function generateSummaryReport(filters: any, user: any) {
     depName: string
     subdepId: number | null
     subdepName: string
+    siteId: number | null
+    siteName: string
     shiftType: string
     quantity: number
   }> = []
@@ -156,15 +161,10 @@ export async function generateSummaryReport(filters: any, user: any) {
     const depName = effectiveSubdep?.dependency?.name || 'N/A'
     const subdepId = effectiveSubdep?.id || null
     const subdepName = effectiveSubdep?.name || 'N/A'
+    const siteId = d.request.diningRoom?.site?.id || null
+    const siteName = d.request.diningRoom?.site?.name || 'Sin Sede'
 
-    items.push({
-      depId,
-      depName,
-      subdepId,
-      subdepName,
-      shiftType: d.request.shiftType,
-      quantity: d.quantity || 1
-    })
+    items.push({ depId, depName, subdepId, subdepName, siteId, siteName, shiftType: d.request.shiftType, quantity: d.quantity || 1 })
   }
 
   // 2. Process extraordinary visits
@@ -173,15 +173,10 @@ export async function generateSummaryReport(filters: any, user: any) {
     const depName = e.subdependency?.dependency?.name || e.dependency?.name || 'N/A'
     const subdepId = e.subdependency?.id || null
     const subdepName = e.subdependency?.name || 'N/A'
+    const siteId = e.diningRoom?.site?.id || null
+    const siteName = e.diningRoom?.site?.name || 'Sin Sede'
 
-    items.push({
-      depId,
-      depName,
-      subdepId,
-      subdepName,
-      shiftType: e.shiftType,
-      quantity: e.quantity || 1
-    })
+    items.push({ depId, depName, subdepId, subdepName, siteId, siteName, shiftType: e.shiftType, quantity: e.quantity || 1 })
   }
 
   // Pivot Table Aggregation
@@ -205,6 +200,9 @@ export async function generateSummaryReport(filters: any, user: any) {
       key = item.subdepId ? `sub_${item.subdepId}` : `sub_name_${item.subdepName}`
       name = item.subdepName
       dependencyName = item.depName
+    } else if (groupBy === 'SITE') {
+      key = item.siteId ? `site_${item.siteId}` : `site_name_${item.siteName}`
+      name = item.siteName
     } else {
       key = item.depId ? `dep_${item.depId}` : `dep_name_${item.depName}`
       name = item.depName
@@ -243,14 +241,7 @@ export async function generateSummaryReport(filters: any, user: any) {
   })
 
   // Grand totals calculation
-  const totals = {
-    desayuno: 0,
-    almuerzo: 0,
-    cena: 0,
-    sobrecena: 0,
-    grandTotal: 0
-  }
-
+  const totals = { desayuno: 0, almuerzo: 0, cena: 0, sobrecena: 0, grandTotal: 0 }
   for (const r of rows) {
     totals.desayuno += r.desayuno
     totals.almuerzo += r.almuerzo
@@ -259,10 +250,6 @@ export async function generateSummaryReport(filters: any, user: any) {
     totals.grandTotal += r.total
   }
 
-  return {
-    success: true,
-    groupBy,
-    rows,
-    totals
-  }
+  return { success: true, groupBy, rows, totals }
 }
+

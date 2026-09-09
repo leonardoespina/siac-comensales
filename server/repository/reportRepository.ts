@@ -75,7 +75,7 @@ export async function getConsolidatedReport(filters: MasterReportFilters, securi
     include: {
       request: {
         include: {
-          diningRoom: true,
+          diningRoom: { include: { site: true } },
           targetSubdependency: {
             include: {
               dependency: true
@@ -152,7 +152,7 @@ export async function getExtraordinaryForReport(filters: MasterReportFilters, se
   return await prisma.extraordinaryDispatch.findMany({
     where: whereClause,
     include: {
-      diningRoom: true,
+      diningRoom: { include: { site: true } },
       dependency: true,
       subdependency: {
         include: {

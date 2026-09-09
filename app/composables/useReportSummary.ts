@@ -1,6 +1,7 @@
 import { ref, computed, readonly } from 'vue'
 import { useDiningRoomsStore } from '~/stores/diningRooms'
 import { useDependenciesStore } from '~/stores/dependencies'
+import { useSitesStore } from '~/stores/sites'
 import { useAuthStore } from '~/stores/auth'
 import { useQuasar } from 'quasar'
 import * as xlsx from 'xlsx'
@@ -8,15 +9,17 @@ import * as xlsx from 'xlsx'
 export function useReportSummary() {
   const diningRoomsStore = useDiningRoomsStore()
   const dependenciesStore = useDependenciesStore()
+  const sitesStore = useSitesStore()
   const authStore = useAuthStore()
   const $q = useQuasar()
 
   const loading = ref(false)
   const dateFrom = ref(new Date().toISOString().split('T')[0])
   const dateTo = ref(new Date().toISOString().split('T')[0])
-  const groupBy = ref<'DEPENDENCY' | 'SUBDEPENDENCY'>('DEPENDENCY')
+  const groupBy = ref<'DEPENDENCY' | 'SUBDEPENDENCY' | 'SITE'>('DEPENDENCY')
   const selectedDiningRoomId = ref<number | null>(null)
   const selectedDependencyId = ref<number | null>(null)
+  const selectedSiteId = ref<number | null>(null)
   const selectedStatus = ref<string | null>(null)
 
   const rows = ref<any[]>([])
@@ -46,10 +49,18 @@ export function useReportSummary() {
     return [{ label: 'Todas las Gerencias', value: null }, ...list]
   })
 
+  const sitesOptions = computed(() => {
+    const list = sitesStore.sites
+      .filter((s: any) => s.active !== false)
+      .map((s: any) => ({ label: s.name, value: s.id }))
+    return [{ label: 'Todas las Sedes', value: null }, ...list]
+  })
+
   const loadCatalogs = async () => {
     await Promise.all([
       diningRoomsStore.fetchAll(),
-      dependenciesStore.fetchAll()
+      dependenciesStore.fetchAll(),
+      sitesStore.fetchSites()
     ])
   }
 
@@ -63,6 +74,7 @@ export function useReportSummary() {
           groupBy: groupBy.value,
           diningRoomId: selectedDiningRoomId.value,
           dependencyId: selectedDependencyId.value,
+          siteId: selectedSiteId.value,
           status: selectedStatus.value
         }
       })
@@ -96,6 +108,16 @@ export function useReportSummary() {
           'Total general': r.total
         }
       }
+      if (groupBy.value === 'SITE') {
+        return {
+          'SEDE': r.name,
+          'DESAYUNO': r.desayuno,
+          'ALMUERZO': r.almuerzo,
+          'CENA': r.cena,
+          'SOBRE-CENA': r.sobrecena,
+          'Total general': r.total
+        }
+      }
       return {
         'GERENCIA': r.name,
         'DESAYUNO': r.desayuno,
@@ -106,53 +128,44 @@ export function useReportSummary() {
       }
     })
 
-    // Add totals row
+    // Fila de totales
+    const baseTotal = {
+      'DESAYUNO': totals.value.desayuno,
+      'ALMUERZO': totals.value.almuerzo,
+      'CENA': totals.value.cena,
+      'SOBRE-CENA': totals.value.sobrecena,
+      'Total general': totals.value.grandTotal
+    }
     if (groupBy.value === 'SUBDEPENDENCY') {
-      excelData.push({
-        'GERENCIA': 'Total general',
-        'SUBDEPENDENCIA': '',
-        'DESAYUNO': totals.value.desayuno,
-        'ALMUERZO': totals.value.almuerzo,
-        'CENA': totals.value.cena,
-        'SOBRE-CENA': totals.value.sobrecena,
-        'Total general': totals.value.grandTotal
-      })
+      excelData.push({ 'GERENCIA': 'Total general', 'SUBDEPENDENCIA': '', ...baseTotal })
+    } else if (groupBy.value === 'SITE') {
+      excelData.push({ 'SEDE': 'Total general', ...baseTotal })
     } else {
-      excelData.push({
-        'GERENCIA': 'Total general',
-        'DESAYUNO': totals.value.desayuno,
-        'ALMUERZO': totals.value.almuerzo,
-        'CENA': totals.value.cena,
-        'SOBRE-CENA': totals.value.sobrecena,
-        'Total general': totals.value.grandTotal
-      })
+      excelData.push({ 'GERENCIA': 'Total general', ...baseTotal })
     }
 
     const ws = xlsx.utils.json_to_sheet(excelData)
     const wb = xlsx.utils.book_new()
-    xlsx.utils.book_append_sheet(wb, ws, 'Resumen Gerencias')
-    xlsx.writeFile(wb, `Resumen_Gerencias_${dateFrom.value}_al_${dateTo.value}.xlsx`)
+    xlsx.utils.book_append_sheet(wb, ws, 'Resumen')
+    xlsx.writeFile(wb, `Resumen_${groupBy.value}_${dateFrom.value}_al_${dateTo.value}.xlsx`)
   }
 
-  const setGroupBy = (val: 'DEPENDENCY' | 'SUBDEPENDENCY') => {
+  const setGroupBy = (val: 'DEPENDENCY' | 'SUBDEPENDENCY' | 'SITE') => {
     groupBy.value = val
     fetchReport()
   }
 
-  const setDateFrom = (val: string) => {
-    dateFrom.value = val
-  }
-
-  const setDateTo = (val: string) => {
-    dateTo.value = val
-  }
-
-  const setSelectedDiningRoomId = (val: number | null) => {
-    selectedDiningRoomId.value = val
-  }
+  const setDateFrom = (val: string) => { dateFrom.value = val }
+  const setDateTo = (val: string) => { dateTo.value = val }
+  const setSelectedDiningRoomId = (val: number | null) => { selectedDiningRoomId.value = val }
 
   const setSelectedDependencyId = (val: number | null) => {
     selectedDependencyId.value = val
+    fetchReport()
+  }
+
+  const setSelectedSiteId = (val: number | null) => {
+    selectedSiteId.value = val
     fetchReport()
   }
 
@@ -169,11 +182,13 @@ export function useReportSummary() {
     groupBy: readonly(groupBy),
     selectedDiningRoomId: readonly(selectedDiningRoomId),
     selectedDependencyId: readonly(selectedDependencyId),
+    selectedSiteId: readonly(selectedSiteId),
     selectedStatus: readonly(selectedStatus),
     rows: readonly(rows),
     totals: readonly(totals),
     diningRoomsOptions,
     dependenciesOptions,
+    sitesOptions,
     statusOptions,
 
     // Actions
@@ -185,6 +200,8 @@ export function useReportSummary() {
     setDateTo,
     setSelectedDiningRoomId,
     setSelectedDependencyId,
+    setSelectedSiteId,
     setSelectedStatus
   }
 }
+
