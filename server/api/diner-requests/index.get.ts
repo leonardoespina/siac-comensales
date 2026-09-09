@@ -11,6 +11,7 @@ export default defineApiHandler(async (event) => {
   const query = getQuery(event)
   const startDate = query.startDate as string
   const endDate = query.endDate as string
+  const siteId = query.siteId ? Number(query.siteId) : undefined
   
   if (!startDate || !endDate) {
     throw new Error('Debe proveer startDate y endDate')
@@ -19,6 +20,19 @@ export default defineApiHandler(async (event) => {
   const userSubIds: number[] = user.subdependencyIds || (user.subdependencyId ? [user.subdependencyId] : [])
   const filterByDependencyId = user.dependencyId ? user.dependencyId : null
   const filterBySubdependencyIds = userSubIds.length > 0 ? userSubIds : null
+
+  // Restricción por Sedes Autorizadas:
+  // Si el usuario no es global y tiene sedes asignadas, filtramos por sus sedes
+  let effectiveSiteIds: number[] | null = null
+  if (!user.isGlobal && user.siteIds && user.siteIds.length > 0) {
+    if (siteId && user.siteIds.includes(siteId)) {
+      effectiveSiteIds = [siteId]
+    } else {
+      effectiveSiteIds = user.siteIds
+    }
+  } else if (siteId) {
+    effectiveSiteIds = [siteId]
+  }
 
   // Evaluamos si el usuario es un Administrador Global (NIVEL 1) para mostrarle las solicitudes eliminadas
   const userWithRoles = await prisma.user.findUnique({
@@ -31,5 +45,5 @@ export default defineApiHandler(async (event) => {
     p.module.code === 'GLOBAL_ACCESS'
   ) || false)
 
-  return dinerRequestService.getRequestsByDateRange(startDate, endDate, filterByDependencyId, filterBySubdependencyIds, isGodMode)
+  return dinerRequestService.getRequestsByDateRange(startDate, endDate, filterByDependencyId, filterBySubdependencyIds, isGodMode, effectiveSiteIds)
 })

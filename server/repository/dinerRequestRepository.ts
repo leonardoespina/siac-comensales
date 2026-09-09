@@ -3,7 +3,14 @@ import type { DinerRequest, DinerRequestDetail } from '@prisma/client'
 
 export const dinerRequestRepository = {
   
-  async findAllByDateRange(startDate: Date, endDate: Date, filterDependencyId?: number | null, filterSubdependencyIds?: number[] | number | null, includeDeleted: boolean = false) {
+  async findAllByDateRange(
+    startDate: Date, 
+    endDate: Date, 
+    filterDependencyId?: number | null, 
+    filterSubdependencyIds?: number[] | number | null, 
+    includeDeleted: boolean = false,
+    siteIds?: number[] | null
+  ) {
     const subIds = Array.isArray(filterSubdependencyIds) 
       ? filterSubdependencyIds 
       : (filterSubdependencyIds ? [filterSubdependencyIds] : [])
@@ -15,6 +22,11 @@ export const dinerRequestRepository = {
           lte: endDate
         },
         ...(includeDeleted ? {} : { deletedAt: null }),
+        ...(siteIds && siteIds.length > 0 ? {
+          diningRoom: {
+            siteId: { in: siteIds }
+          }
+        } : {}),
         ...(subIds.length > 0 ? {
           details: {
             some: {
@@ -37,7 +49,14 @@ export const dinerRequestRepository = {
       },
       include: {
         createdBy: { select: { name: true, cedula: true } },
-        diningRoom: { select: { name: true } },
+        diningRoom: { 
+          select: { 
+            id: true, 
+            name: true, 
+            siteId: true, 
+            site: { select: { id: true, name: true } } 
+          } 
+        },
         targetSubdependency: { select: { id: true, dependencyId: true } },
         details: {
           include: {

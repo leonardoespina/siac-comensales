@@ -90,10 +90,10 @@ export const dinerRequestService = {
     return true
   },
 
-  async getRequestsByDateRange(startDateStr: string, endDateStr: string, dependencyId?: number | null, subdependencyIds?: number[] | number | null, isAdmin: boolean = false) {
+  async getRequestsByDateRange(startDateStr: string, endDateStr: string, dependencyId?: number | null, subdependencyIds?: number[] | number | null, isAdmin: boolean = false, siteIds?: number[] | null) {
     const start = new Date(`${startDateStr}T00:00:00.000Z`)
     const end = new Date(`${endDateStr}T00:00:00.000Z`)
-    return dinerRequestRepository.findAllByDateRange(start, end, dependencyId, subdependencyIds, isAdmin)
+    return dinerRequestRepository.findAllByDateRange(start, end, dependencyId, subdependencyIds, isAdmin, siteIds)
   },
 
   async createRequests(data: { 

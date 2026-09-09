@@ -1,17 +1,41 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useDinerRequestsStore } from '~/stores/dinerRequests'
+import { useAuthStore } from '~/stores/auth'
+import { useSitesStore } from '~/stores/sites'
 import { useNotifications } from '~/composables/core/useNotifications'
 import { useQuasar } from 'quasar'
 import dayjs from 'dayjs'
-import { computed } from 'vue'
 
 export function useDinerRequestHistory() {
   const store = useDinerRequestsStore()
+  const authStore = useAuthStore()
+  const sitesStore = useSitesStore()
   const { notify } = useNotifications()
   const $q = useQuasar()
 
   const filterStartDate = ref(dayjs().format('YYYY-MM-DD'))
   const filterEndDate = ref(dayjs().add(1, 'day').format('YYYY-MM-DD'))
+  
+  // Si el usuario tiene exactamente 1 sede autorizada, se preselecciona automáticamente
+  const initialSiteId = (!authStore.hasPermission('GLOBAL_ACCESS', 'canRead') && authStore.user?.sites?.length === 1)
+    ? authStore.user.sites[0].id
+    : null
+  const selectedSiteId = ref<number | null>(initialSiteId)
+
+  const sitesOptions = computed(() => {
+    if (authStore.hasPermission('GLOBAL_ACCESS', 'canRead') || !authStore.user?.sites || authStore.user.sites.length === 0) {
+      const allActive = sitesStore.sites
+        .filter((s: any) => s.active !== false)
+        .map((s: any) => ({ label: s.name, value: s.id }))
+      return [{ label: 'Todas las Sedes', value: null }, ...allActive]
+    }
+
+    const userSites = authStore.user.sites.map((s: any) => ({ label: s.name, value: s.id }))
+    if (userSites.length > 1) {
+      return [{ label: 'Todas mis Sedes', value: null }, ...userSites]
+    }
+    return userSites
+  })
 
   const historyColumns = [
     { name: 'batchCode', label: 'Lote / Solicitud', align: 'left', field: (row: any) => row.batchCode || row.id, sortable: true },
@@ -35,12 +59,15 @@ export function useDinerRequestHistory() {
       const key = `${batch}__${safeDate}`
       
       if (!groups[key]) {
+        const dRoomLabel = req.diningRoom?.name 
+          ? (req.diningRoom.site?.name ? `${req.diningRoom.name} (${req.diningRoom.site.name})` : req.diningRoom.name)
+          : 'N/A'
         groups[key] = {
           id: key,
           batchCode: req.batchCode || key,
           date: safeDate,
           shiftTypes: [],
-          diningRoom: req.diningRoom?.name || 'N/A',
+          diningRoom: dRoomLabel,
           status: req.status,
           isDeleted: false,
           totalDiners: 0,
@@ -65,7 +92,10 @@ export function useDinerRequestHistory() {
       
       group.shiftTypes = Array.from(new Set(sourceReqs.map((r: any) => r.shiftType)))
       
-      const diningRooms = Array.from(new Set(sourceReqs.map((r: any) => r.diningRoom?.name).filter(Boolean)))
+      const diningRooms = Array.from(new Set(sourceReqs.map((r: any) => {
+        if (!r.diningRoom?.name) return null
+        return r.diningRoom.site?.name ? `${r.diningRoom.name} (${r.diningRoom.site.name})` : r.diningRoom.name
+      }).filter(Boolean)))
       group.diningRoom = diningRooms.length > 0 ? diningRooms.join(', ') : (group.diningRoom || 'N/A')
 
       group.totalDiners = sourceReqs.reduce((sum: number, r: any) => {
@@ -83,7 +113,7 @@ export function useDinerRequestHistory() {
   })
 
   async function loadData() {
-    await store.fetchRequests(filterStartDate.value, filterEndDate.value)
+    await store.fetchRequests(filterStartDate.value, filterEndDate.value, selectedSiteId.value)
   }
 
   function confirmDelete(row: any) {
@@ -113,6 +143,8 @@ export function useDinerRequestHistory() {
   return {
     filterStartDate,
     filterEndDate,
+    selectedSiteId,
+    sitesOptions,
     historyColumns,
     groupedRequests,
     loadData,

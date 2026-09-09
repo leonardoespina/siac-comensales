@@ -5,11 +5,15 @@ export const useDinerRequestsStore = defineStore('dinerRequests', () => {
   const requests = ref<any[]>([])
   const loading = ref(false)
 
-  async function fetchRequests(startDate: string, endDate: string) {
+  async function fetchRequests(startDate: string, endDate: string, siteId?: number | null) {
     loading.value = true
     try {
       const data = await $fetch<any[]>('/api/diner-requests', {
-        query: { startDate, endDate }
+        query: {
+          startDate,
+          endDate,
+          siteId: siteId || undefined
+        }
       })
       requests.value = data
     } catch (e: any) {

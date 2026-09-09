@@ -168,7 +168,7 @@
                       v-model="form.filters.value.diningRoomId" 
                       :options="diningRoomsStore.activeDiningRooms" 
                       option-value="id" 
-                      option-label="name" 
+                      :option-label="(d) => d.site?.name ? `${d.name} (${d.site.name})` : d.name" 
                       emit-value 
                       map-options 
                       outlined 
@@ -315,7 +315,7 @@
                                       <q-icon name="room" size="14px" v-else color="grey-6" />
                                     </q-item-section>
                                     <q-item-section class="text-caption">
-                                      {{ room.name }}
+                                      {{ room.site?.name ? `${room.name} (${room.site.name})` : room.name }}
                                     </q-item-section>
                                   </q-item>
                                 </q-list>
@@ -341,7 +341,7 @@
                           v-model="form.dinerDiningRooms.value[props.row.id]"
                           :options="diningRoomsStore.activeDiningRooms"
                           option-value="id"
-                          option-label="name"
+                          :option-label="(d) => d.site?.name ? `${d.name} (${d.site.name})` : d.name"
                           emit-value
                           map-options
                           dense
@@ -373,7 +373,7 @@
                               v-model="form.dinerDiningRooms.value[props.row.id]"
                               :options="diningRoomsStore.activeDiningRooms"
                               option-value="id"
-                              option-label="name"
+                              :option-label="(d) => d.site?.name ? `${d.name} (${d.site.name})` : d.name"
                               emit-value
                               map-options
                               dense
@@ -453,7 +453,7 @@
                                         <q-icon name="room" size="14px" v-else color="grey-6" />
                                       </q-item-section>
                                       <q-item-section class="text-caption">
-                                        {{ room.name }}
+                                        {{ room.site?.name ? `${room.name} (${room.site.name})` : room.name }}
                                       </q-item-section>
                                     </q-item>
                                   </q-list>
@@ -671,15 +671,16 @@ function filterProxyDiners(val: string, update: (fn: () => void) => void) {
 
 function getRoomFullName(roomId: number | null) {
   if (!roomId) return 'Sin Asignar'
-  const found = diningRoomsStore.activeDiningRooms.find(r => r.id === roomId)
-  return found ? found.name : 'Sin Asignar'
+  const found = diningRoomsStore.diningRooms.find(r => r.id === roomId)
+  return found ? (found.site?.name ? `${found.name} (${found.site.name})` : found.name) : 'Sin Asignar'
 }
 
 function getRoomShortName(roomId: number | null) {
   if (!roomId) return 'Default'
-  const found = diningRoomsStore.activeDiningRooms.find(r => r.id === roomId)
+  const found = diningRoomsStore.diningRooms.find(r => r.id === roomId)
   if (!found) return 'N/A'
-  return found.name.replace(/^Comedor\s+/i, '')
+  const cleanName = found.name.replace(/^Comedor\s+/i, '')
+  return found.site?.name ? `${cleanName} (${found.site.name})` : cleanName
 }
 
 async function onSubmit() {

@@ -212,7 +212,16 @@ export function useDinerRequestForm() {
       { name: 'rationType', label: 'Dieta', align: 'left', field: 'rationType' }
     ]
 
-    baseCols.push({ name: 'comedor', label: 'Comedor', align: 'left', field: () => filters.value.diningRoomId ? diningRoomsStore.diningRooms.find(d => d.id === filters.value.diningRoomId)?.name : 'N/A' })
+    baseCols.push({
+      name: 'comedor',
+      label: 'Comedor',
+      align: 'left',
+      field: () => {
+        if (!filters.value.diningRoomId) return 'N/A'
+        const found = diningRoomsStore.diningRooms.find(d => d.id === filters.value.diningRoomId)
+        return found ? (found.site?.name ? `${found.name} (${found.site.name})` : found.name) : 'N/A'
+      }
+    })
     const shiftCols = activeShifts.value.map(shift => ({
       name: shift,
       label: shift.charAt(0) + shift.slice(1).toLowerCase(),

@@ -16,14 +16,27 @@
     <!-- Filtros de Búsqueda Histórico -->
     <q-card bordered class="my-card shadow-1 q-mb-md">
       <q-card-section class="row q-col-gutter-md items-center">
-        <div class="col-12 col-md-4">
-          <q-input v-model="history.filterStartDate.value" label="Desde" type="date" outlined dense />
+        <div class="col-12 col-sm-6 col-md-3">
+          <q-input v-model="history.filterStartDate.value" label="Desde" type="date" outlined dense bg-color="white" />
         </div>
-        <div class="col-12 col-md-4">
-          <q-input v-model="history.filterEndDate.value" label="Hasta" type="date" outlined dense />
+        <div class="col-12 col-sm-6 col-md-3">
+          <q-input v-model="history.filterEndDate.value" label="Hasta" type="date" outlined dense bg-color="white" />
         </div>
-        <div class="col-12 col-md-4 row justify-end">
-          <q-btn color="secondary" icon="search" label="Buscar" @click="history.loadData" :loading="store.loading" />
+        <div class="col-12 col-sm-6 col-md-3">
+          <q-select
+            v-model="history.selectedSiteId.value"
+            :options="history.sitesOptions.value"
+            emit-value
+            map-options
+            outlined
+            dense
+            bg-color="white"
+            label="Sede Autorizada"
+            :disable="history.sitesOptions.value.length === 1"
+          />
+        </div>
+        <div class="col-12 col-sm-6 col-md-3 row justify-end">
+          <q-btn color="secondary" icon="search" label="Buscar" class="full-width" @click="history.loadData" :loading="store.loading" />
         </div>
       </q-card-section>
     </q-card>
@@ -110,6 +123,7 @@ import { useSquadsStore } from '~/stores/squads'
 import { useDiningRoomsStore } from '~/stores/diningRooms'
 import { useMealSchedulesStore } from '~/stores/mealSchedules'
 import { useDinersStore } from '~/stores/diners'
+import { useSitesStore } from '~/stores/sites'
 import RequestFormModal from '~/components/diners/requests/RequestFormModal.vue'
 
 const store = useDinerRequestsStore()
@@ -123,14 +137,15 @@ const squadsStore = useSquadsStore()
 const diningRoomsStore = useDiningRoomsStore()
 const schedulesStore = useMealSchedulesStore()
 const dinersStore = useDinersStore()
+const sitesStore = useSitesStore()
 
 // Referencia al modal hijo para abrirlo
 const formModal = ref<InstanceType<typeof RequestFormModal> | null>(null)
 
 onMounted(async () => {
-  history.loadData()
   // Precarga de diccionarios necesarios para el funcionamiento global del módulo
   await Promise.all([
+    sitesStore.fetchSites(),
     settingsStore.fetchCutoffRules(),
     dependenciesStore.fetchAll(),
     squadsStore.fetchAll(),
@@ -138,5 +153,6 @@ onMounted(async () => {
     schedulesStore.fetchSchedules(),
     dinersStore.fetchAll()
   ])
+  history.loadData()
 })
 </script>

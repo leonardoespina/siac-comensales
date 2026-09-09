@@ -15,7 +15,10 @@ export interface UserState {
   name: string
   warehouseId?: number | null
   diningRoomId?: number | null
+  sites?: Array<{ id: number; name: string; description?: string | null; active?: boolean }>
+  dependencyId?: number | null
   subdependencyId?: number | null
+  subdependencies?: Array<{ id: number; name: string; dependencyId: number }>
   subdependency?: {
     name: string
     dependencyId: number
