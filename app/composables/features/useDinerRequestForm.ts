@@ -482,15 +482,25 @@ export function useDinerRequestForm() {
     currentBatchCode.value = batchCode
     isOpen.value = true
 
+    const targetDate = typeof dateGroup.date === 'string' && dateGroup.date.includes('T')
+      ? dateGroup.date.split('T')[0]
+      : (dateGroup.date || dayjs().format('YYYY-MM-DD'))
+
     // IMPORTANTE: Consultar el lote completo directamente del backend para garantizar
-    // que se incluyan todos los turnos (desayuno, almuerzo, cena, sobrecena) y comedores
-    // sin importar si la tabla principal tenía un filtro activo de sede.
+    // que se incluyan todos los turnos (desayuno, almuerzo, cena, sobrecena) y comedores,
+    // acotando los datos exclusivamente a la fecha de la fila seleccionada en el historial.
     let sourceRequests = (dateGroup.originalRequests || []).filter((req: any) => req.deletedAt === null)
     if (batchCode) {
       try {
         const fullBatch = await $fetch<any[]>(`/api/diner-requests/${batchCode}`)
         if (fullBatch && fullBatch.length > 0) {
-          sourceRequests = fullBatch
+          const dateFiltered = fullBatch.filter((r: any) => {
+            const rd = typeof r.date === 'string' 
+              ? (r.date.includes('T') ? r.date.split('T')[0] : r.date) 
+              : (r.date?.toISOString ? r.date.toISOString().split('T')[0] : r.date)
+            return rd === targetDate
+          })
+          sourceRequests = dateFiltered.length > 0 ? dateFiltered : fullBatch
         }
       } catch (err) {
         console.warn('Fallback a datos de la fila:', err)
@@ -500,23 +510,8 @@ export function useDinerRequestForm() {
       sourceRequests = dateGroup.originalRequests
     }
 
-    const rawDates = sourceRequests.map((r: any) => {
-      const d = r.date
-      return typeof d === 'string' && d.includes('T') ? d.split('T')[0] : d
-    }).filter(Boolean)
-    const uniqueDates = Array.from(new Set(rawDates)).sort()
-
-    if (uniqueDates.length === 1) {
-      filters.value.date = uniqueDates[0]
-    } else if (uniqueDates.length > 1) {
-      filters.value.date = {
-        from: uniqueDates[0],
-        to: uniqueDates[uniqueDates.length - 1]
-      }
-    } else {
-      const safeDate = typeof dateGroup.date === 'string' && dateGroup.date.includes('T') ? dateGroup.date.split('T')[0] : dateGroup.date
-      filters.value.date = safeDate || dayjs().format('YYYY-MM-DD')
-    }
+    // Fijamos la fecha estrictamente al día seleccionado para que la actualización no intente enviar días pasados
+    filters.value.date = targetDate
 
     const firstReq = sourceRequests[0] || {}
     filters.value.diningRoomId = firstReq.diningRoomId || null
