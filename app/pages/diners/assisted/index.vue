@@ -95,11 +95,14 @@ const onDispatch = async (shift: string) => {
 const getShiftStatus = (shift: string) => {
   if (!contextData.value) return { code: 'NONE', label: 'Sin solicitud', color: 'grey-5', icon: 'remove_circle_outline' }
 
-  const req = contextData.value.requests.find((r: any) => r.request.shiftType === shift)
-  if (!req) return { code: 'NONE', label: 'Sin solicitud', color: 'grey-5', icon: 'help_outline' }
+  // Buscar todos los registros que correspondan a este turno (para lidiar inteligentemente con duplicados)
+  const shiftReqs = contextData.value.requests.filter((r: any) => r.request.shiftType === shift)
+  if (shiftReqs.length === 0) return { code: 'NONE', label: 'Sin solicitud', color: 'grey-5', icon: 'help_outline' }
 
-  if (req.dispatchedAt) {
-    const time = new Date(req.dispatchedAt).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })
+  // Prioridad 1: Si ALGUNO de los duplicados ya fue despachado, garantizamos mostrar que está retirado.
+  const dispatchedReq = shiftReqs.find((r: any) => r.dispatchedAt)
+  if (dispatchedReq) {
+    const time = new Date(dispatchedReq.dispatchedAt).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })
     return { code: 'DISPATCHED', label: `Retirado (${time})`, color: 'positive', icon: 'check_circle' }
   }
 
