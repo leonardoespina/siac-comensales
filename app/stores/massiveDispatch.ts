@@ -51,6 +51,18 @@ export const useMassiveDispatchStore = defineStore('massiveDispatch', () => {
     }
   }
 
+  async function confirmMultiBatchDispatch(batchIds: number[], scannedCedula: string, force: boolean) {
+    try {
+      const response = await $fetch('/api/dispatch/massive/confirm-multi', {
+        method: 'POST',
+        body: { batchIds, scannedCedula, force }
+      })
+      return response
+    } catch (error) {
+      throw error
+    }
+  }
+
   return {
     massiveBatches,
     dependencies,
@@ -58,6 +70,7 @@ export const useMassiveDispatchStore = defineStore('massiveDispatch', () => {
     loadCatalogs,
     loadHistory,
     searchBatches,
-    confirmBatchDispatch
+    confirmBatchDispatch,
+    confirmMultiBatchDispatch
   }
 })

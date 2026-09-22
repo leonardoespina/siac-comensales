@@ -127,8 +127,22 @@
                     map-options
                   />
                 </div>
-                <div class="col-12 col-md-3">
-                  <q-input v-model="wizard.searchDate.value" label="Fecha de la Solicitud" type="date" outlined />
+                <div class="col-12 col-md-2">
+                  <q-input
+                    v-model="wizard.searchDateFrom.value"
+                    label="Fecha Desde"
+                    type="date"
+                    outlined
+                  />
+                </div>
+                <div class="col-12 col-md-2">
+                  <q-input
+                    v-model="wizard.searchDateTo.value"
+                    label="Fecha Hasta"
+                    type="date"
+                    outlined
+                    :min="wizard.searchDateFrom.value"
+                  />
                 </div>
                 <div class="col-12 col-md-3">
                   <q-select 
@@ -157,43 +171,73 @@
                 </q-stepper-navigation>
             </q-step>
 
-            <!-- PASO 2: SELECCIÓN DE SERVICIO -->
-            <q-step :name="2" title="Seleccionar Servicio" icon="restaurant_menu" :done="wizard.step.value > 2">
-              <div class="text-h6 q-mb-md">Seleccione el servicio a despachar</div>
-              
+            <!-- PASO 2: SELECCIÓN DE SERVICIOS -->
+            <q-step :name="2" title="Seleccionar Servicios" icon="restaurant_menu" :done="wizard.step.value > 2">
+              <div class="text-h6 q-mb-md">Seleccione los servicios a despachar</div>
+
               <div v-if="wizard.foundBatches.value.length === 0" class="text-center text-grey-7 q-pa-md">
-                No se encontraron solicitudes masivas pendientes para esta área y fecha.
+                No se encontraron solicitudes masivas pendientes para este rango de fechas y área.
               </div>
-              
-              <q-list bordered separator v-else>
-                <q-item 
-                  v-for="batch in wizard.foundBatches.value" 
-                  :key="batch.id"
-                  clickable
-                  v-ripple
-                  :active="wizard.selectedBatch.value?.id === batch.id"
-                  active-class="bg-blue-1 text-primary text-weight-bold"
-                  @click="wizard.selectedBatch.value = batch"
-                  :disable="batch.isDispatched"
+
+              <template v-else>
+                <!-- Agrupar por dateLabel -->
+                <div
+                  v-for="(group, date) in Object.groupBy(wizard.foundBatches.value, (b) => b.dateLabel)"
+                  :key="date"
+                  class="q-mb-md"
                 >
-                  <q-item-section avatar>
-                    <q-icon :name="batch.isDispatched ? 'check_circle' : 'radio_button_unchecked'" :color="batch.isDispatched ? 'positive' : 'grey-5'" />
-                  </q-item-section>
-                  <q-item-section>
-                    <q-item-label>{{ batch.shiftType }}</q-item-label>
-                    <q-item-label caption>
-                      Cantidad: {{ batch.quantity }} viandas | Código: {{ batch.batchCode || 'N/A' }}
-                    </q-item-label>
-                  </q-item-section>
-                  <q-item-section side v-if="batch.isDispatched">
-                    <q-chip color="positive" text-color="white" size="sm">Ya entregado</q-chip>
-                  </q-item-section>
-                </q-item>
-              </q-list>
+                  <q-expansion-item
+                    :label="`📅 ${date} — ${group.filter(b => !b.isDispatched).length} pendiente(s)`"
+                    :caption="`${group.length} lote(s) en total`"
+                    default-opened
+                    header-class="bg-blue-grey-1 text-primary text-weight-bold rounded-borders"
+                  >
+                    <q-table
+                      :rows="group"
+                      :columns="[
+                        { name: 'shiftType', label: 'Turno', field: 'shiftType', align: 'left' },
+                        { name: 'quantity', label: 'Viandas', field: 'quantity', align: 'center' },
+                        { name: 'batchCode', label: 'Código', field: 'batchCode', align: 'left' },
+                        { name: 'status', label: 'Estado', field: 'isDispatched', align: 'center' }
+                      ]"
+                      row-key="id"
+                      selection="multiple"
+                      v-model:selected="wizard.selectedBatches.value"
+                      flat
+                      bordered
+                      :rows-per-page-options="[0]"
+                      hide-bottom
+                      class="q-mt-xs"
+                    >
+                      <template v-slot:body-cell-status="props">
+                        <q-td :props="props">
+                          <q-chip
+                            :color="props.row.isDispatched ? 'positive' : 'warning'"
+                            text-color="white"
+                            size="sm"
+                            :icon="props.row.isDispatched ? 'check_circle' : 'pending'"
+                          >
+                            {{ props.row.isDispatched ? 'ENTREGADO' : 'PENDIENTE' }}
+                          </q-chip>
+                        </q-td>
+                      </template>
+                    </q-table>
+                  </q-expansion-item>
+                </div>
+              </template>
+
+              <div v-if="wizard.selectedBatches.value.length > 0" class="q-mt-md text-positive text-weight-bold">
+                <q-icon name="check_circle" /> {{ wizard.selectedBatches.value.length }} lote(s) seleccionado(s) para despachar
+              </div>
 
               <q-stepper-navigation class="q-mt-md row justify-between">
                 <q-btn flat color="primary" label="Volver a Buscar" @click="wizard.step.value = 1" />
-                <q-btn color="primary" label="Siguiente (Autorizar)" @click="wizard.step.value = 3" :disable="!wizard.selectedBatch.value || wizard.selectedBatch.value.isDispatched" />
+                <q-btn
+                  color="primary"
+                  label="Siguiente (Autorizar)"
+                  @click="wizard.step.value = 3"
+                  :disable="wizard.selectedBatches.value.length === 0"
+                />
               </q-stepper-navigation>
             </q-step>
 
@@ -201,10 +245,20 @@
             <q-step :name="3" title="Autorizar Retiro" icon="fingerprint">
               <div class="text-h6 q-mb-md">Autorizar Retiro de Servicio</div>
               
-              <div class="bg-blue-1 q-pa-md rounded-borders q-mb-md" v-if="wizard.selectedBatch.value">
-                <strong>Servicio:</strong> {{ wizard.selectedBatch.value.shiftType }} ({{ wizard.selectedBatch.value.quantity }} viandas)<br>
-                <strong>Destino:</strong> {{ wizard.selectedBatch.value.subdependencyName }}<br>
-                <strong>Persona Autorizada:</strong> {{ wizard.selectedBatch.value.expectedResponsible }}
+              <div class="bg-blue-1 q-pa-md rounded-borders q-mb-md" v-if="wizard.selectedBatches.value.length > 0">
+                <strong>Servicios a despachar:</strong>
+                <q-chip
+                  v-for="batch in wizard.selectedBatches.value"
+                  :key="batch.id"
+                  color="primary"
+                  text-color="white"
+                  size="sm"
+                  class="q-ml-xs"
+                >
+                  {{ batch.shiftType }} ({{ batch.quantity }} viandas)
+                </q-chip>
+                <br>
+                <strong>Delegado esperado:</strong> {{ wizard.selectedBatches.value[0]?.expectedResponsible }}
               </div>
 
               <!-- Activación Biométrica Manual -->
@@ -257,11 +311,11 @@
 
               <q-stepper-navigation class="q-mt-xl row justify-between">
                 <q-btn flat color="primary" label="Volver" @click="wizard.step.value = 2" />
-                <q-btn 
-                  :color="wizard.forceDispatch.value ? 'warning' : 'positive'" 
-                  :label="wizard.forceDispatch.value ? 'Confirmar y Despachar Lote (Forzado)' : 'Procesar y Despachar Lote'" 
-                  @click="() => wizard.handleManualSubmit(fetchHistory)" 
-                  :loading="wizard.isDispatching.value" 
+                <q-btn
+                  :color="wizard.forceDispatch.value ? 'warning' : 'positive'"
+                  :label="wizard.forceDispatch.value ? `Confirmar y Despachar (${wizard.selectedBatches.value.length} lotes - Forzado)` : `Procesar y Despachar (${wizard.selectedBatches.value.length} lotes)`"
+                  @click="() => wizard.processMultiDispatch(fetchHistory)"
+                  :loading="wizard.isDispatching.value"
                 />
               </q-stepper-navigation>
             </q-step>

@@ -6,17 +6,19 @@ import timezone from 'dayjs/plugin/timezone.js'
 dayjs.extend(utc)
 dayjs.extend(timezone)
 
-export async function findMassiveRequests(diningRoomId: number | undefined, dateStr: string, dependencyId?: number | null, subdependencyId?: number | null) {
-  // Al usar Prisma con columnas @db.Date, Prisma extrae la fecha UTC del objeto Date.
-  // Si usamos dayjs.tz('America/Caracas').endOf('day'), la hora local 23:59:59 se traduce a 03:59:59 UTC del día SIGUIENTE.
-  // Prisma toma ese día siguiente (ej. 19) y hace la consulta <= '2026-08-19', incluyendo solicitudes de mañana.
-  // SOLUCION: Usamos fechas UTC estrictas para que Prisma extraiga exactamente el string de fecha correcto.
-  const startOfDay = new Date(`${dateStr}T00:00:00.000Z`)
-  const endOfDay = new Date(`${dateStr}T23:59:59.999Z`)
+export async function findMassiveRequests(
+  diningRoomId: number | undefined,
+  dateFrom: string,
+  dateTo: string,
+  dependencyId?: number | null,
+  subdependencyId?: number | null
+) {
+  // Rango inclusivo: desde el inicio del día "desde" hasta el final del día "hasta"
+  // Se usan fechas UTC estrictas para que Prisma extraiga exactamente el string de fecha correcto
+  // evitando el problema de timezone que desplaza el día en campos @db.Date
+  const startOfRange = new Date(`${dateFrom}T00:00:00.000Z`)
+  const endOfRange   = new Date(`${dateTo}T23:59:59.999Z`)
 
-  // El campo targetSubdependencyId está directamente en DinerRequest.
-  // Filtrar por él es directo, eficiente y semánticamente correcto.
-  // No es necesario navegar por details.diner.subdependencyId.
   const requestFilter: Record<string, unknown> = {}
   if (subdependencyId) {
     requestFilter.targetSubdependencyId = subdependencyId
@@ -27,16 +29,11 @@ export async function findMassiveRequests(diningRoomId: number | undefined, date
   const massiveRequests = await prisma.dinerRequest.findMany({
     where: {
       diningRoomId,
-      date: {
-        gte: startOfDay,
-        lte: endOfDay
-      },
+      date: { gte: startOfRange, lte: endOfRange },
       status: 'APPROVED',
       deletedAt: null,
       ...requestFilter,
-      details: {
-        some: { modality: 'TAKE_AWAY' }
-      }
+      details: { some: { modality: 'TAKE_AWAY' } }
     },
     include: {
       createdBy: {
@@ -46,7 +43,8 @@ export async function findMassiveRequests(diningRoomId: number | undefined, date
         where: { modality: 'TAKE_AWAY' },
         include: { diner: { include: { subdependency: { include: { dependency: true } } } } }
       }
-    }
+    },
+    orderBy: { date: 'asc' }
   })
 
   return massiveRequests
@@ -85,6 +83,35 @@ export async function executeBatchDispatch(batchId: number, operatorId: number, 
       receiverCedula: receiverCedula
     }
   })
+}
+
+/**
+ * Despacha múltiples lotes masivos en una sola transacción atómica.
+ * Arquitectura: Recibe el cliente de transacción como parámetro para garantizar atomicidad.
+ * Si cualquier lote falla, todos se revierten.
+ */
+export async function executeMultiBatchDispatch(
+  batchIds: number[],
+  operatorId: number,
+  receiverCedula: string
+) {
+  const now = new Date()
+  await prisma.$transaction(
+    batchIds.map(batchId =>
+      prisma.dinerRequestDetail.updateMany({
+        where: {
+          requestId: batchId,
+          modality: 'TAKE_AWAY',
+          dispatchedAt: null // Safety catch: no sobreescribir despachos previos
+        },
+        data: {
+          dispatchedAt: now,
+          dispatchedById: operatorId,
+          receiverCedula
+        }
+      })
+    )
+  )
 }
 
 // Para buscar comensal o usuario autorizado

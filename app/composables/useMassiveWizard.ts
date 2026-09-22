@@ -24,14 +24,17 @@ export function useMassiveWizard() {
   const isOpen = ref(false)
   const step = ref(1)
   
-  const searchDate = ref(new Date().toISOString().split('T')[0])
+  const today = new Date().toISOString().split('T')[0]
+  const searchDateFrom = ref(today)
+  const searchDateTo   = ref(today)
   const searchDependency = ref<number | null>(null)
   const searchSubdependency = ref<number | null>(null)
   const searchDiningRoom = ref<number | null>(null)
 
   const isSearching = ref(false)
   const foundBatches = ref([])
-  const selectedBatch = ref(null)
+  const selectedBatch = ref(null)      // Mantener para compatibilidad individual
+  const selectedBatches = ref<any[]>([]) // NUEVO: selección múltiple
 
   const scannedCedula = ref('')
   const warningMessage = ref('')
@@ -192,12 +195,14 @@ export function useMassiveWizard() {
 
   function open() {
     step.value = 1
-    searchDate.value = new Date().toISOString().split('T')[0]
+    searchDateFrom.value = new Date().toISOString().split('T')[0]
+    searchDateTo.value   = new Date().toISOString().split('T')[0]
     searchDependency.value = null
     searchSubdependency.value = null
     searchDiningRoom.value = null
     foundBatches.value = []
     selectedBatch.value = null
+    selectedBatches.value = []
     scannedCedula.value = ''
     warningMessage.value = ''
     forceDispatch.value = false
@@ -213,7 +218,8 @@ export function useMassiveWizard() {
     isSearching.value = true
     try {
       const params = {
-        date: searchDate.value,
+        dateFrom: searchDateFrom.value,
+        dateTo: searchDateTo.value,
         dependencyId: searchDependency.value,
         subdependencyId: searchSubdependency.value,
         diningRoomId: searchDiningRoom.value
@@ -222,6 +228,7 @@ export function useMassiveWizard() {
       const batches = await store.searchBatches(params)
       foundBatches.value = batches
       selectedBatch.value = null
+      selectedBatches.value = []
       step.value = 2 // Move to step 2 automatically
     } catch (error) {
       $q.notify({ type: 'negative', message: 'Error buscando solicitudes masivas' })
@@ -278,36 +285,88 @@ export function useMassiveWizard() {
     }
   }
 
+  async function processMultiDispatch(onSuccessCallback?: () => void) {
+    if (!scannedCedula.value) {
+      $q.notify({ type: 'warning', message: 'Debe ingresar o escanear una cédula' })
+      return
+    }
+    if (selectedBatches.value.length === 0) {
+      $q.notify({ type: 'warning', message: 'Seleccione al menos un lote' })
+      return
+    }
+
+    isDispatching.value = true
+
+    try {
+      const batchIds = selectedBatches.value.map((b: any) => b.id)
+      const response: any = await store.confirmMultiBatchDispatch(
+        batchIds,
+        scannedCedula.value.trim(),
+        forceDispatch.value
+      )
+
+      $q.notify({ type: 'positive', message: response.message || 'Despacho multi-lote exitoso' })
+      isOpen.value = false
+      warningMessage.value = ''
+      forceDispatch.value = false
+      if (onSuccessCallback) {
+        onSuccessCallback()
+      } else {
+        store.loadHistory({ date: searchDate.value })
+      }
+    } catch (error: any) {
+      const errData = error.data || error.response?._data
+      const errCode = errData?.data?.code || errData?.code
+      const errMsg = errData?.message || errData?.statusMessage || 'Error al procesar el despacho'
+
+      if (errCode === 'DIFFERENT_DEPENDENCY') {
+        warningMessage.value = errMsg
+        forceDispatch.value = true
+        $q.notify({ type: 'warning', message: errMsg, timeout: 6000 })
+      } else {
+        $q.notify({ type: 'negative', message: errMsg })
+        scannedCedula.value = ''
+        forceDispatch.value = false
+        warningMessage.value = ''
+      }
+    } finally {
+      isDispatching.value = false
+    }
+  }
+
   return {
-    // State (Readonly for UI protection)
+    // State (Readonly para protección de la UI)
     isOpen,
     step,
-    searchDate,
+    searchDateFrom,
+    searchDateTo,
     searchDependency,
     searchSubdependency,
     searchDiningRoom,
     isSearching,
     foundBatches: readonly(foundBatches),
     selectedBatch,
+    selectedBatches,
     scannedCedula,
     warningMessage: readonly(warningMessage),
     forceDispatch: readonly(forceDispatch),
     isDispatching: readonly(isDispatching),
-    
+
     // Derived
     filteredSubdepsOptions,
-    diningRoomsOptions: computed(() => 
+    diningRoomsOptions: computed(() =>
       diningRoomsStore.activeDiningRooms.map(dr => ({ label: dr.name, value: dr.id }))
     ),
     isReaderConnected: readonly(isReaderConnected),
     isVerifying: readonly(isVerifying),
     capturedImage: readonly(capturedImage),
-    
+
     // Actions
     open,
     resetSelection,
     performSearch,
     processDispatch,
+    processMultiDispatch,
     startScannerCycle,
     handleManualSubmit
   }
