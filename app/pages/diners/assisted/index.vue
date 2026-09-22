@@ -15,6 +15,8 @@ const actionMessage = ref('')
 const actionError = ref('')
 const shifts = ['DESAYUNO', 'ALMUERZO', 'CENA', 'SOBRECENA']
 
+const activeTab = ref('individual')
+
 // Dining Rooms
 const { data: diningRooms } = useFetch('/api/dining-rooms', {
   transform: (data: any) => data.filter((d: any) => d.active)
@@ -148,7 +150,28 @@ const getShiftStatus = (shift: string) => {
         </q-banner>
 
         <q-card class="shadow-2 q-mb-lg rounded-borders">
-          <q-card-section>
+
+          <!-- Pestañas de navegación -->
+          <q-tabs
+            v-model="activeTab"
+            dense
+            class="text-grey-7 bg-white"
+            active-color="primary"
+            indicator-color="primary"
+            align="justify"
+          >
+            <q-tab name="individual" icon="person_search" label="Despacho Individual" />
+            <q-tab name="massive" icon="group_add" label="Despacho Masivo" />
+          </q-tabs>
+
+          <q-separator />
+
+          <q-tab-panels v-model="activeTab" animated keep-alive>
+
+            <!-- PANEL 1: Despacho Individual (contenido original) -->
+            <q-tab-panel name="individual" class="q-pa-md">
+              <q-card-section class="q-pa-none">
+
             <form @submit.prevent="onSearch" class="row q-col-gutter-md items-center">
               <div class="col-12 col-sm-8 col-md-9">
                 <q-input
@@ -187,7 +210,7 @@ const getShiftStatus = (shift: string) => {
               </template>
               {{ searchError }}
             </q-banner>
-          </q-card-section>
+            </q-card-section>
 
           <!-- Diner Context Data -->
           <q-card v-if="contextData" class="q-mt-md shadow-4 rounded-borders">
@@ -294,10 +317,18 @@ const getShiftStatus = (shift: string) => {
                     bg-color="white"
                   />
                 </div>
+                 </div>
               </div>
-            </div>
-          </q-card-section>
-          </q-card>
+            </q-card-section>
+            </q-card>
+            </q-tab-panel>
+
+            <!-- PANEL 2: Despacho Masivo -->
+            <q-tab-panel name="massive" class="q-pa-md">
+              <DinerMassiveDispatch :diningRoomId="diningRoomId" />
+            </q-tab-panel>
+
+          </q-tab-panels>
         </q-card>
       </div>
     </div>
