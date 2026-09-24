@@ -13,7 +13,9 @@
       <template v-slot:body-cell-actions="props">
         <q-td :props="props" class="text-right">
           <q-btn flat round dense color="primary" icon="edit" @click="openEdit(props.row)" />
-          <q-btn flat round dense color="negative" icon="delete" @click="deleteRole(props.row.id)" />
+          <q-btn flat round dense color="negative" icon="delete" disable>
+            <q-tooltip>Eliminación de roles temporalmente deshabilitada (mantenimiento)</q-tooltip>
+          </q-btn>
         </q-td>
       </template>
     </SharedCrudTable>
