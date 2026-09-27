@@ -37,6 +37,11 @@ export type AppEvents = {
   // Sesiones de Usuario en tiempo real
   'session:revoked': { userId: number, newSessionId: string }
   'session:closed': { userId: number }
+
+  // Biometría y Control de Acceso Hikvision en tiempo real
+  'biometric:identified': { diningRoomId: number, diningRoomName: string, cedula: string, name: string, verifyMode: string, detectedAt: string }
+  'biometric:synced': { dinerId: number, cedula: string, success: boolean, targetCount: number }
+  'biometric:enrolled': { dinerId: number, cedula: string, sourceDeviceId: number }
 }
 
 // Singleton in-memory bus (Resistente a HMR de Nuxt en desarrollo)

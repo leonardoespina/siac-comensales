@@ -29,6 +29,14 @@ export default defineNitroPlugin((nitroApp) => {
             socket.join(`global_inventory`)
           }
         })
+
+        // Unir socket al canal del comedor específico para biometría en vivo
+        socket.on('join:dining_room', (payload: { diningRoomId: number }) => {
+          if (payload?.diningRoomId) {
+            socket.join(`dining_room_${payload.diningRoomId}`)
+            console.log(`⚡ Socket unido al canal de comedor: dining_room_${payload.diningRoomId}`)
+          }
+        })
       })
 
       // Escuchar eventos del EventBus y transmitirlos a Socket.io
