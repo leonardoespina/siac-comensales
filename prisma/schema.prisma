@@ -198,6 +198,12 @@ model DiningRoom {
   siteId Int   @map("site_id")
   site   Site  @relation(fields: [siteId], references: [id], onDelete: Restrict)
 
+  // ── PARAMETRIZACIÓN BIOMÉTRICA DINÁMICA (HIKVISION) ──
+  deviceIp       String?  @map("device_ip")
+  devicePort     Int      @default(443) @map("device_port")
+  deviceUser     String?  @default("admin") @map("device_user")
+  devicePassword String?  @map("device_password")
+  deviceEnabled  Boolean  @default(true) @map("device_enabled")
 
   dinerRequests DinerRequest[]
   extraordinaryDispatches ExtraordinaryDispatch[]

@@ -8,11 +8,19 @@ export function useDiningRoomForm() {
   
   const isDialogOpen = ref(false)
   const isEditing = ref(false)
+  const isTestingDevice = ref(false)
+  const deviceTestResult = ref<any>(null)
+
   const form = ref({
     id: 0,
     name: '',
     siteId: null as number | null,
-    active: true
+    active: true,
+    deviceIp: '',
+    devicePort: 443,
+    deviceUser: 'admin',
+    devicePassword: '',
+    deviceEnabled: true
   })
 
   const resetForm = () => {
@@ -20,8 +28,14 @@ export function useDiningRoomForm() {
       id: 0,
       name: '',
       siteId: null,
-      active: true
+      active: true,
+      deviceIp: '',
+      devicePort: 443,
+      deviceUser: 'admin',
+      devicePassword: '',
+      deviceEnabled: true
     }
+    deviceTestResult.value = null
   }
 
   const openCreate = () => {
@@ -35,10 +49,54 @@ export function useDiningRoomForm() {
       id: row.id,
       name: row.name,
       siteId: row.siteId ?? row.site?.id ?? null,
-      active: row.active 
+      active: row.active,
+      deviceIp: row.deviceIp || '',
+      devicePort: row.devicePort || 443,
+      deviceUser: row.deviceUser || 'admin',
+      devicePassword: row.devicePassword || '',
+      deviceEnabled: row.deviceEnabled !== false
     }
+    deviceTestResult.value = null
     isEditing.value = true
     isDialogOpen.value = true
+  }
+
+  const testDeviceConnection = async () => {
+    if (!form.value.deviceIp) {
+      $q.notify({ type: 'warning', message: 'Ingrese una dirección IP para probar.' })
+      return
+    }
+
+    isTestingDevice.value = true
+    deviceTestResult.value = null
+
+    try {
+      const res = await $fetch<{ success: boolean; message: string; device: any }>('/api/dining-rooms/test-device', {
+        method: 'POST',
+        body: {
+          deviceIp: form.value.deviceIp,
+          devicePort: form.value.devicePort,
+          deviceUser: form.value.deviceUser,
+          devicePassword: form.value.devicePassword
+        }
+      })
+
+      deviceTestResult.value = res.device
+      $q.notify({
+        type: 'positive',
+        message: `Conexión Exitosa: ${res.device.model} (Firmware: ${res.device.firmware})`,
+        icon: 'check_circle'
+      })
+    } catch (err: any) {
+      const msg = err.data?.message || err.message || 'Error al conectar con el dispositivo'
+      $q.notify({
+        type: 'negative',
+        message: msg,
+        icon: 'error'
+      })
+    } finally {
+      isTestingDevice.value = false
+    }
   }
 
   const submit = async () => {
@@ -75,9 +133,12 @@ export function useDiningRoomForm() {
   return {
     isDialogOpen,
     isEditing,
+    isTestingDevice,
+    deviceTestResult,
     form,
     openCreate,
     openEdit,
+    testDeviceConnection,
     submit,
     remove
   }

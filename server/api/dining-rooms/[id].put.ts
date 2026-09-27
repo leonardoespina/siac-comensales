@@ -16,9 +16,15 @@ export default defineApiHandler(async (event) => {
     throw new DomainError('El nombre del comedor y la sede son requeridos', 'VALIDATION_ERROR', 400)
   }
 
-  const updated = await repo.updateDiningRoom(id, body.name, Number(body.siteId), body.active)
+  const updated = await repo.updateDiningRoom(id, body.name, Number(body.siteId), body.active, {
+    deviceIp: body.deviceIp,
+    devicePort: body.devicePort !== undefined ? Number(body.devicePort) : undefined,
+    deviceUser: body.deviceUser,
+    devicePassword: body.devicePassword,
+    deviceEnabled: body.deviceEnabled !== undefined ? Boolean(body.deviceEnabled) : undefined
+  })
 
-  await logAudit(userId, 'ACTUALIZAR', 'COMEDOR', updated.id, `Comedor actualizado: ${updated.name}`)
+  await logAudit(userId, 'ACTUALIZAR', 'COMEDOR', updated.id, `Comedor actualizado: ${updated.name} (IP: ${body.deviceIp || 'Sin IP'})`)
 
   return updated
 })
