@@ -42,14 +42,20 @@ export function useDinerRequestForm() {
   }
 
   function hasCustomShiftRoom(dinerId: string | number, shift: string): boolean {
-    return !!dinerShiftDiningRooms.value[dinerId]?.[shift]
+    const custom = dinerShiftDiningRooms.value[dinerId]?.[shift]
+    return !!custom && custom !== getDefaultDiningRoom(dinerId)
   }
 
   function setShiftDiningRoom(dinerId: string | number, shift: string, roomId: number | null) {
     if (!dinerShiftDiningRooms.value[dinerId]) {
       dinerShiftDiningRooms.value[dinerId] = {}
     }
-    dinerShiftDiningRooms.value[dinerId][shift] = roomId
+    const defaultRoom = getDefaultDiningRoom(dinerId)
+    if (roomId === null || roomId === defaultRoom) {
+      dinerShiftDiningRooms.value[dinerId][shift] = null
+    } else {
+      dinerShiftDiningRooms.value[dinerId][shift] = roomId
+    }
     dinerShiftDiningRooms.value = { ...dinerShiftDiningRooms.value }
   }
 
@@ -151,7 +157,7 @@ export function useDinerRequestForm() {
 
   // Si cambia el comedor global, asignarlo a todos los comensales actuales como atajo
   watch(() => filters.value.diningRoomId, (newId) => {
-    if (isViewMode.value) return
+    if (isViewMode.value || isLoadingData.value) return
     loadedDiners.value.forEach(d => {
       dinerDiningRooms.value[d.id] = newId
     })
@@ -514,14 +520,32 @@ export function useDinerRequestForm() {
     filters.value.date = targetDate
 
     const firstReq = sourceRequests[0] || {}
-    filters.value.diningRoomId = firstReq.diningRoomId || null
+    
+    // Determinar el comedor global predominante entre las solicitudes del lote
+    const globalRoomCounts: Record<number, number> = {}
+    sourceRequests.forEach((r: any) => {
+      if (r.diningRoomId) {
+        globalRoomCounts[r.diningRoomId] = (globalRoomCounts[r.diningRoomId] || 0) + 1
+      }
+    })
+    let predominantGlobalRoom: number | null = null
+    let maxGlobalCount = 0
+    for (const [rIdStr, count] of Object.entries(globalRoomCounts)) {
+      if (count > maxGlobalCount) {
+        maxGlobalCount = count
+        predominantGlobalRoom = parseInt(rIdStr)
+      }
+    }
+    filters.value.diningRoomId = predominantGlobalRoom || firstReq.diningRoomId || null
     filters.value.observations = firstReq.observations || ''
     
-    const dinersMap = new Map()
-    
+    // 1. Recolectar comensales y sus turnos con su comedor exacto guardado
+    const dinersMap = new Map<any, any>()
+    const dinerShiftsMap = new Map<any, Record<string, { shift: string, diningRoomId: number | null, modality: string, quantity: number }>>()
+
     sourceRequests.forEach((req: any) => {
       const shift = req.shiftType
-      const reqDiningRoomId = req.diningRoomId
+      const reqDiningRoomId = req.diningRoomId || null
       
       req.details?.forEach((d: any) => {
         // Usa el ID del comensal. Si es visitante (sin ID), generamos uno virtual para la fila
@@ -538,41 +562,75 @@ export function useDinerRequestForm() {
             subdependencyId: d.diner?.subdependencyId,
             squadId: d.diner?.squadId
           })
+          dinerShiftsMap.set(dinerId, {})
         }
-        
-        if (!gridState.value[dinerId]) {
-          gridState.value[dinerId] = {}
+
+        dinerShiftsMap.get(dinerId)![shift] = {
+          shift,
+          diningRoomId: reqDiningRoomId,
+          modality: d.modality,
+          quantity: d.quantity || 1
         }
+      })
+    })
+    
+    // 2. Para cada comensal, fijar su comedor predominante y mapear con fidelidad cada turno
+    dinerShiftsMap.forEach((shiftsData, dinerId) => {
+      if (!gridState.value[dinerId]) {
+        gridState.value[dinerId] = {}
+      }
+      if (!dinerShiftDiningRooms.value[dinerId]) {
+        dinerShiftDiningRooms.value[dinerId] = {}
+      }
+
+      // Conteo de comedores para este comensal específico
+      const roomCounts: Record<number, number> = {}
+      Object.values(shiftsData).forEach(s => {
+        if (s.diningRoomId) {
+          roomCounts[s.diningRoomId] = (roomCounts[s.diningRoomId] || 0) + 1
+        }
+      })
+
+      let predominantDinerRoom: number | null = null
+      let maxDinerCount = 0
+      for (const [rIdStr, count] of Object.entries(roomCounts)) {
+        if (count > maxDinerCount) {
+          maxDinerCount = count
+          predominantDinerRoom = parseInt(rIdStr)
+        }
+      }
+
+      const dinerDefaultRoom = predominantDinerRoom || filters.value.diningRoomId || firstReq.diningRoomId || null
+      dinerDiningRooms.value[dinerId] = dinerDefaultRoom
+
+      Object.entries(shiftsData).forEach(([shift, s]) => {
         gridState.value[dinerId][shift] = true
-        
+        quantities.value[dinerId] = s.quantity || 1
+
         // Cargar el flag de Masivo
-        if (d.modality === 'TAKE_AWAY') {
+        if (s.modality === 'TAKE_AWAY') {
           gridState.value[dinerId]['MASIVO'] = true
           masterChecks.value[shift] = true
           
           // Si la cantidad es > 1, definitivamente es un Retiro Mara (Grupos de Seguridad)
-          if (d.quantity > 1) {
+          if (s.quantity > 1) {
             masterChecks.value['MASIVO'] = true
             bulkAuthorizedDinerId.value = dinerId
-            bulkQuantities.value[shift] = d.quantity
+            bulkQuantities.value[shift] = s.quantity
           }
         } else if (gridState.value[dinerId]['MASIVO'] === undefined) {
           gridState.value[dinerId]['MASIVO'] = false
         }
 
-        quantities.value[dinerId] = d.quantity || 1
-        dinerDiningRooms.value[dinerId] = reqDiningRoomId || firstReq.diningRoomId || null
-
-        if (!dinerShiftDiningRooms.value[dinerId]) {
-          dinerShiftDiningRooms.value[dinerId] = {}
+        // Asignación fiel de comedor: Si el comedor del turno difiere del comedor base del comensal, se guarda personalizado
+        if (s.diningRoomId && s.diningRoomId !== dinerDefaultRoom) {
+          dinerShiftDiningRooms.value[dinerId][shift] = s.diningRoomId
+        } else {
+          dinerShiftDiningRooms.value[dinerId][shift] = null
         }
-        // Solo se registra como turno personalizado si difiere explícitamente del comedor base
-        dinerShiftDiningRooms.value[dinerId][shift] = (reqDiningRoomId && reqDiningRoomId !== firstReq.diningRoomId)
-          ? reqDiningRoomId
-          : null
       })
     })
-    
+
     loadedDiners.value = Array.from(dinersMap.values())
     
     // Auto-completar los selectores de Dependencia y Subdependencia
