@@ -32,7 +32,7 @@
           <q-banner
             v-if="overlayStatus !== 'idle'"
             :class="overlayStatus === 'success' ? 'bg-positive text-white' : 'bg-negative text-white'"
-            class="q-px-lg q-py-md"
+            class="q-px-lg q-py-md text-center"
           >
             <template v-slot:avatar>
               <q-icon
@@ -40,33 +40,65 @@
                 size="48px"
               />
             </template>
-            <div class="text-h6 text-weight-bold">{{ overlayTitle }}</div>
-            <div class="text-body1">{{ overlayMessage }}</div>
+            <div class="text-h5 text-weight-bold">{{ overlayTitle }}</div>
+            <div class="text-subtitle1">{{ overlayMessage }}</div>
           </q-banner>
 
-          <!-- Animación Biométrica Continua -->
+          <!-- Sección Central: Modo Reposo vs Modo Despacho con Foto Facial -->
           <q-card-section class="text-center q-py-xl bg-grey-1">
-            <!-- Icono animado o Imagen de Huella según estado -->
-            <div class="q-mb-md">
-              <img 
-                v-if="capturedImage" 
-                :src="capturedImage" 
-                style="height: 120px; object-fit: contain; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" 
-              />
-              <q-icon 
-                v-else
-                name="fingerprint" 
-                size="120px" 
-                :color="isReaderConnected ? (isVerifying ? 'primary' : 'positive') : 'grey-5'"
-                :class="{'pulsing-icon': isVerifying}"
-              />
+            <!-- CASO 1: Comensal Identificado y Despachado con Éxito (Muestra Foto Real) -->
+            <div v-if="overlayStatus === 'success' && lastDispatchResult?.diner" class="column items-center">
+              <q-avatar size="140px" class="shadow-4 bg-white q-mb-md">
+                <img 
+                  :src="`/api/biometrics/face/${lastDispatchResult.diner.cedula}`" 
+                  @error="(e: any) => e.target.style.display = 'none'"
+                />
+                <q-icon name="person" size="90px" color="primary" />
+              </q-avatar>
+
+              <div class="text-h4 text-weight-bolder text-dark q-mt-xs">
+                {{ lastDispatchResult.diner.name }}
+              </div>
+              
+              <div class="text-h6 text-grey-8 q-mt-xs">
+                Cédula: <strong>{{ lastDispatchResult.diner.cedula }}</strong>
+              </div>
+
+              <div class="row q-gutter-sm justify-center q-mt-sm">
+                <q-chip color="primary" text-color="white" icon="restaurant" size="md">
+                  Turno: {{ lastDispatchResult.dispatch?.shift || 'Despacho' }}
+                </q-chip>
+                <q-chip 
+                  :color="lastDispatchResult.diner.rationType === 'NORMAL' ? 'teal' : 'orange-9'" 
+                  text-color="white" 
+                  icon="local_dining" 
+                  size="md"
+                >
+                  Ración: {{ lastDispatchResult.diner.rationType || 'NORMAL' }}
+                </q-chip>
+              </div>
+
+              <div class="text-caption text-grey-6 q-mt-sm" v-if="lastDispatchResult.diner.subdependency">
+                {{ lastDispatchResult.diner.subdependency.name }}
+              </div>
             </div>
-            
-            <div class="text-h4 text-dark q-mt-md">
-              {{ isReaderConnected ? 'Coloque su dedo' : 'Lector Desconectado' }}
-            </div>
-            <div class="text-body1 text-grey-7 q-mt-sm">
-              {{ isReaderConnected ? 'El sistema está esperando automáticamente' : 'Verifique la conexión USB del sensor U.are.U 5160' }}
+
+            <!-- CASO 2: Modo Reposo (Esperando que alguien se pare frente a la cámara) -->
+            <div v-else class="column items-center">
+              <div class="q-mb-md">
+                <q-icon 
+                  :name="isVerifying ? 'sync' : 'face'" 
+                  size="120px" 
+                  :color="isVerifying ? 'primary' : 'positive'"
+                />
+              </div>
+              
+              <div class="text-h4 text-dark q-mt-md">
+                {{ isVerifying ? 'Procesando Ración...' : 'Párese frente al Biométrico' }}
+              </div>
+              <div class="text-body1 text-grey-7 q-mt-sm">
+                {{ isVerifying ? 'Validando ración en el sistema...' : 'El terminal Hikvision identificará su rostro y registrará su bandeja en vivo' }}
+              </div>
             </div>
           </q-card-section>
 
@@ -74,7 +106,7 @@
 
           <!-- Búsqueda Manual (Plan B) -->
           <q-card-section class="q-py-md">
-            <div class="text-subtitle1 text-grey-8 q-mb-sm text-center">¿Sin huella? Búsqueda Manual</div>
+            <div class="text-subtitle1 text-grey-8 q-mb-sm text-center">¿Sin rostro? Búsqueda Manual por Cédula</div>
             <q-form @submit.prevent="processManualDispatch" class="row q-col-gutter-sm items-center justify-center">
               <div class="col-8">
                 <q-input
@@ -120,7 +152,7 @@
 
         <q-card-section class="q-pt-md">
           <div class="text-body2 q-mb-md text-grey-8">
-            Seleccione la sede y comedor autorizado donde operará este lector:
+            Seleccione la sede y comedor autorizado donde operará este punto de despacho:
           </div>
           <q-select
             v-model="tempDiningRoomId"
@@ -157,16 +189,15 @@ const {
   overlayStatus,
   overlayMessage,
   overlayTitle,
+  lastDispatchResult,
   isDiningRoomModalOpen,
   diningRooms,
   selectedDiningRoomId,
-  isReaderConnected,
   isVerifying,
   saveDiningRoomSelection,
   processManualDispatch,
   clearSearch,
-  stopKioskLoop,
-  capturedImage
+  stopKioskLoop
 } = useDispatchManagement()
 
 const tempDiningRoomId = ref<number | null>(null)
@@ -177,7 +208,6 @@ const currentDiningRoomName = computed(() => {
   return dr.site?.name ? `${dr.name} — Sede ${dr.site.name}` : dr.name
 })
 
-// Detener el lector si cambiamos de pantalla
 onUnmounted(() => {
   stopKioskLoop()
 })

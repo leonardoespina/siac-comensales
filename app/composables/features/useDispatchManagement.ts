@@ -1,24 +1,40 @@
-import { ref, readonly, onMounted, watch } from 'vue'
+import { ref, readonly, onMounted, onUnmounted } from 'vue'
 import { useQuasar } from 'quasar'
 import { useDinersStore } from '~/stores/diners'
-import { useBiometrics } from '~/composables/features/useBiometrics'
 import { useAudioAlerts } from '~/composables/core/useAudioAlerts'
+
+/* =========================================================================
+ * [LEGACY / BIOMÉTRICO ANTERIOR - DigitalPersona U.are.U 5160 USB]
+ * Se mantiene comentado para referencia o respaldo operativo.
+ * =========================================================================
+ * import { useBiometrics } from '~/composables/features/useBiometrics'
+ * ========================================================================= */
 
 export function useDispatchManagement() {
   const $q = useQuasar()
   const dinersStore = useDinersStore()
-  
-  const {
-    isReaderConnected,
-    isVerifying,
-    startMonitoring,
-    stopMonitoring,
-    verifyFingerprint,
-    cancelOperation,
-    capturedImage
-  } = useBiometrics()
-
   const { playAlert } = useAudioAlerts()
+  const nuxtApp = useNuxtApp()
+  const socket = (nuxtApp as any)?.$socket
+
+  /* =========================================================================
+   * [LEGACY / BIOMÉTRICO ANTERIOR - Desestructuración de useBiometrics]
+   * const {
+   *   isReaderConnected,
+   *   isVerifying,
+   *   startMonitoring,
+   *   stopMonitoring,
+   *   verifyFingerprint,
+   *   cancelOperation,
+   *   capturedImage
+   * } = useBiometrics()
+   * ========================================================================= */
+
+  // ── ESTADO DEL LECTOR FACIAL HIKVISION (ACTUAL) ──────────────────────────────
+  const isReaderConnected = ref(true) // Conectado por red / Socket.io
+  const isVerifying = ref(false)
+  const capturedImage = ref<string | null>(null)
+  const lastBiometricScan = ref<any>(null)
 
   const searchCedula = ref('')
   const isSearching = ref(false)
@@ -33,11 +49,61 @@ export function useDispatchManagement() {
   const isDiningRoomModalOpen = ref(false)
   const diningRooms = ref<any[]>([])
   const selectedDiningRoomId = ref<number | null>(null)
-  
-  // Base de datos local biométrica
-  const candidateTemplates = ref<string[]>([])
-  const mappingArray = ref<any[]>([])
-  const isKioskActive = ref(false)
+
+  /* =========================================================================
+   * [LEGACY / BIOMÉTRICO ANTERIOR - Cache local de huellas FMD Base64]
+   * const candidateTemplates = ref<string[]>([])
+   * const mappingArray = ref<any[]>([])
+   * const isKioskActive = ref(false)
+   *
+   * async function preloadBiometrics() {
+   *   try {
+   *     const data = await dinersStore.fetchAllBiometrics()
+   *     const flatTemplates: string[] = []
+   *     const flatMapping: any[] = []
+   *     data.forEach(record => {
+   *       if (record.templates && Array.isArray(record.templates)) {
+   *         record.templates.forEach((t: string) => {
+   *           flatTemplates.push(t)
+   *           flatMapping.push(record.diner)
+   *         })
+   *       }
+   *     })
+   *     candidateTemplates.value = flatTemplates
+   *     mappingArray.value = flatMapping
+   *   } catch (error) {
+   *     $q.notify({ type: 'negative', message: 'Error descargando huellas para el kiosco' })
+   *   }
+   * }
+   * ========================================================================= */
+
+  // ── CONEXIÓN EN TIEMPO REAL HIKVISION (SOCKET.IO) ────────────────────────────
+
+  function setupHikvisionSocket() {
+    if (!socket) return
+
+    // Unirse a la sala del comedor seleccionado
+    if (selectedDiningRoomId.value) {
+      socket.emit('join:dining_room', { diningRoomId: selectedDiningRoomId.value })
+    }
+
+    // Escuchar detecciones faciales y biométricas en tiempo real
+    socket.off('biometric:identified')
+    socket.on('biometric:identified', async (event: any) => {
+      console.log('🔔 [useDispatchManagement] Rostro identificado en tiempo real:', event)
+
+      // Evitar llamadas concurrentes si ya se está despachando
+      if (isSearching.value) return
+
+      // Si el evento pertenece a este comedor o estamos en modo global
+      if (!selectedDiningRoomId.value || event.diningRoomId === selectedDiningRoomId.value) {
+        lastBiometricScan.value = event
+        isVerifying.value = true
+        await dispatchFood(event.cedula)
+        isVerifying.value = false
+      }
+    })
+  }
 
   onMounted(async () => {
     const savedId = localStorage.getItem('dispatch_dining_room_id')
@@ -47,30 +113,32 @@ export function useDispatchManagement() {
 
     try {
       const allRooms = await $fetch<any[]>('/api/dining-rooms')
-      // Filtramos para asegurar que solo vean los comedores activos autorizados
       diningRooms.value = allRooms.filter(dr => dr.active)
 
-      // Regla de Negocio: Si tiene 1 solo comedor autorizado, fijarlo automáticamente y no permitir cambiarlo.
+      // Regla de Negocio: Si tiene 1 solo comedor autorizado, fijarlo automáticamente
       if (diningRooms.value.length === 1) {
         const singleId = diningRooms.value[0].id
         selectedDiningRoomId.value = singleId
         localStorage.setItem('dispatch_dining_room_id', singleId.toString())
         isDiningRoomModalOpen.value = false
-        await preloadBiometrics()
-        startKioskLoop()
+        setupHikvisionSocket()
       } else {
         const isValid = diningRooms.value.some(dr => dr.id === selectedDiningRoomId.value)
         if (!savedId || !isValid) {
           selectedDiningRoomId.value = null
           isDiningRoomModalOpen.value = true
         } else {
-          // Si ya está configurado, precargar las huellas y encender el Kiosco
-          await preloadBiometrics()
-          startKioskLoop()
+          setupHikvisionSocket()
         }
       }
     } catch (error: any) {
       $q.notify({ type: 'negative', message: 'Error al cargar comedores: ' + (error.data?.message || error.message) })
+    }
+  })
+
+  onUnmounted(() => {
+    if (socket) {
+      socket.off('biometric:identified')
     }
   })
 
@@ -80,78 +148,48 @@ export function useDispatchManagement() {
     localStorage.setItem('dispatch_dining_room_id', id.toString())
     isDiningRoomModalOpen.value = false
     
-    // Iniciar el lector tras configurar la ubicación
-    await preloadBiometrics()
-    startKioskLoop()
+    // Conectar el socket al nuevo comedor seleccionado
+    setupHikvisionSocket()
   }
 
-  async function preloadBiometrics() {
-    try {
-      const data = await dinersStore.fetchAllBiometrics()
-      const flatTemplates: string[] = []
-      const flatMapping: any[] = []
-      
-      data.forEach(record => {
-        if (record.templates && Array.isArray(record.templates)) {
-          record.templates.forEach((t: string) => {
-            flatTemplates.push(t)
-            flatMapping.push(record.diner)
-          })
-        }
-      })
-      candidateTemplates.value = flatTemplates
-      mappingArray.value = flatMapping
-    } catch (error) {
-      $q.notify({ type: 'negative', message: 'Error descargando huellas para el kiosco' })
-    }
-  }
-
-  // --- Lógica del Bucle Kiosco ---
-  function startKioskLoop() {
-    isKioskActive.value = true
-    startMonitoring()
-    runScannerCycle()
-  }
+  /* =========================================================================
+   * [LEGACY / BIOMÉTRICO ANTERIOR - Bucle de polling local del sensor USB]
+   * function startKioskLoop() {
+   *   isKioskActive.value = true
+   *   startMonitoring()
+   *   runScannerCycle()
+   * }
+   * function stopKioskLoop() {
+   *   isKioskActive.value = false
+   *   stopMonitoring()
+   *   cancelOperation()
+   * }
+   * async function runScannerCycle() {
+   *   if (!isKioskActive.value || !isReaderConnected.value || isVerifying.value) return
+   *   const matchedIndex = await verifyFingerprint(candidateTemplates.value)
+   *   if (matchedIndex === null || matchedIndex < 0) {
+   *     if (isKioskActive.value) {
+   *       if (capturedImage.value) {
+   *         playAlert('FINGERPRINT_NO_MATCH')
+   *         overlayStatus.value = 'error'
+   *         overlayTitle.value = 'Huella no reconocida'
+   *         overlayMessage.value = 'No se pudo identificar su huella. Por favor, intente de nuevo.'
+   *         setTimeout(() => { overlayStatus.value = 'idle'; runScannerCycle() }, 2500)
+   *       } else {
+   *         setTimeout(runScannerCycle, 1500)
+   *       }
+   *     }
+   *     return
+   *   }
+   *   const matchedDiner = mappingArray.value[matchedIndex]
+   *   await dispatchFood(matchedDiner.cedula)
+   * }
+   * ========================================================================= */
 
   function stopKioskLoop() {
-    isKioskActive.value = false
-    stopMonitoring()
-    cancelOperation()
-  }
-
-  async function runScannerCycle() {
-    if (!isKioskActive.value || !isReaderConnected.value || isVerifying.value) return
-    
-    // Esperar a que el lector detecte una huella
-    const matchedIndex = await verifyFingerprint(candidateTemplates.value)
-    
-    // Si la lectura falló o no coincidió, evaluar si hubo intento real del usuario
-    if (matchedIndex === null || matchedIndex < 0) {
-      if (isKioskActive.value) {
-        // capturedImage tiene valor solo si el lector capturó físicamente un dedo
-        // Si no hay imagen, fue un fallo técnico silencioso (sin dedo, sensor ocupado) → reintentar callado
-        if (capturedImage.value) {
-          // Alguien puso el dedo pero no fue reconocido → feedback visual + audio
-          playAlert('FINGERPRINT_NO_MATCH')
-          overlayStatus.value = 'error'
-          overlayTitle.value = 'Huella no reconocida'
-          overlayMessage.value = 'No se pudo identificar su huella. Por favor, intente de nuevo.'
-
-          setTimeout(() => {
-            overlayStatus.value = 'idle'
-            runScannerCycle()
-          }, 2500)
-        } else {
-          // Fallo técnico silencioso (sin dedo aún) → reintentar sin molestar al usuario
-          setTimeout(runScannerCycle, 1500)
-        }
-      }
-      return
+    if (socket) {
+      socket.off('biometric:identified')
     }
-
-    // Huella detectada
-    const matchedDiner = mappingArray.value[matchedIndex]
-    await dispatchFood(matchedDiner.cedula)
   }
 
   // Despacho vía manual (Fallback)
@@ -176,7 +214,7 @@ export function useDispatchManagement() {
     isSearching.value = true
     
     try {
-      // Uso correcto de Pinia (Regla AGENTS.md)
+      // Llamada al store de Pinia
       const response = await dinersStore.processDispatch(cedula, selectedDiningRoomId.value)
       
       lastDispatchResult.value = response
@@ -201,31 +239,17 @@ export function useDispatchManagement() {
                 : (isWrongRoom ? 'Comedor No Asignado' : 'Acceso Denegado')))
       overlayMessage.value = error.data?.message || 'No se pudo procesar el despacho.'
       
-      console.log('[dispatchFood] Error object:', error)
-      console.log('[dispatchFood] error.data:', error.data)
-      
       const errorCode = error.data?.data?.code || error.data?.code || 'GENERIC_ERROR'
-      console.log('[dispatchFood] Extracted code:', errorCode)
       playAlert(errorCode)
     } finally {
       isSearching.value = false
       
-      // Bucle Automático: Mostrar el mensaje gigante por 3 segundos y volver al Kiosco
+      // Mostrar el mensaje gigante por 3.5 segundos y volver a escuchar
       setTimeout(() => {
         overlayStatus.value = 'idle'
-        if (isKioskActive.value) {
-          runScannerCycle()
-        }
-      }, 3000)
+      }, 3500)
     }
   }
-
-  watch(isReaderConnected, (connected) => {
-    // Auto-recuperación si el USB se desconecta y vuelve a conectarse
-    if (connected && isKioskActive.value && !isVerifying.value) {
-      runScannerCycle()
-    }
-  })
 
   return {
     searchCedula,
@@ -239,6 +263,7 @@ export function useDispatchManagement() {
     selectedDiningRoomId,
     isReaderConnected: readonly(isReaderConnected),
     isVerifying: readonly(isVerifying),
+    lastBiometricScan: readonly(lastBiometricScan),
     saveDiningRoomSelection,
     processManualDispatch,
     clearSearch,
