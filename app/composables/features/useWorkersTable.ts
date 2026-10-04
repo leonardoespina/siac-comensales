@@ -19,6 +19,13 @@ export function useWorkersTable(formDataDependencyId: any) {
   // Filtros para Admin Global y Búsqueda
   const filterDependencyId = ref<number | null>(null)
   const filterSubdependencyId = ref<number | null>(null)
+  const filterStatus = ref<'ACTIVE' | 'INACTIVE' | 'ALL'>('ACTIVE')
+
+  const statusOptions = [
+    { label: 'Solo Activos', value: 'ACTIVE' },
+    { label: 'Solo Inactivos / Desincorporados', value: 'INACTIVE' },
+    { label: 'Todos los Registros', value: 'ALL' }
+  ]
 
   // Estado del Smart Filter
   const filterState = ref({
@@ -96,7 +103,6 @@ export function useWorkersTable(formDataDependencyId: any) {
 
   // Opciones de subdependencia para los filtros de la tabla
   const filterSubdependencyOptions = computed(() => {
-    // Usamos el filtro global si existe, si no, usamos la dependencia asignada al usuario
     const targetDepId = filterDependencyId.value || authStore.user?.dependencyId
     if (!targetDepId) return []
     const dep = depStore.dependencies.find(d => d.id === targetDepId)
@@ -106,8 +112,6 @@ export function useWorkersTable(formDataDependencyId: any) {
   const subdependencyOptions = computed(() => {
     let depId = formDataDependencyId.value
     
-    // Si no seleccionaron dependencia (porque están en el v-else-if), 
-    // autodetectamos a qué dependencia pertenece su subdependencyId
     if (!depId && authStore.user?.dependencyId) {
       depId = authStore.user.dependencyId
     } else if (!depId && authStore.user?.subdependencyId) {
@@ -124,7 +128,6 @@ export function useWorkersTable(formDataDependencyId: any) {
     return (dep?.subdependencies || []).filter((sub: any) => sub.active !== false)
   })
 
-  // Computado para mostrar el nombre de la subdependencia del usuario logueado
   const userSubdependencyName = computed(() => {
     if (authStore.user?.subdependencyId) {
       for (const dep of depStore.dependencies) {
@@ -147,41 +150,70 @@ export function useWorkersTable(formDataDependencyId: any) {
   })
 
   const columns = [
-    { name: 'cedula', label: 'Cédula', field: 'cedula', align: 'left', sortable: true },
-    { name: 'name', label: 'Nombre Completo', field: 'name', align: 'left', sortable: true },
+    { name: 'cedula', label: 'Cédula', field: 'cedula', align: 'left' as const, sortable: true },
+    { name: 'name', label: 'Nombre Completo', field: 'name', align: 'left' as const, sortable: true },
     { 
       name: 'site', 
       required: true, 
       label: 'Sede Base', 
-      align: 'left', 
+      align: 'left' as const, 
       field: (row: any) => row.site?.name || 'No asignada',
       sortable: true
     },
-    { name: 'position', label: 'Cargo', field: (row: any) => row.position?.name || 'Sin Cargo', align: 'left', sortable: true },
-    { name: 'rationType', label: 'Tipo de Ración', field: 'rationType', align: 'center' },
-    { name: 'actions', label: 'Opciones', field: 'actions', align: 'center' }
+    { name: 'position', label: 'Cargo', field: (row: any) => row.position?.name || 'Sin Cargo', align: 'left' as const, sortable: true },
+    { name: 'rationType', label: 'Tipo de Ración', field: 'rationType', align: 'center' as const },
+    { name: 'status', label: 'Estado', field: (row: any) => row.active ? 'Activo' : 'Inactivo', align: 'center' as const, sortable: true },
+    { name: 'actions', label: 'Opciones', field: 'actions', align: 'center' as const }
   ]
+
+  function fetchCurrentDiners() {
+    const params: any = { status: filterStatus.value }
+    if (filterSubdependencyId.value) {
+      params.subdependencyId = filterSubdependencyId.value
+    } else if (filterDependencyId.value) {
+      params.dependencyId = filterDependencyId.value
+    }
+    dinersStore.fetchAll(params)
+  }
 
   const deleteDiner = (diner: any) => {
     $q.dialog({
-      title: 'Confirmar',
-      message: `¿Estás seguro de eliminar al trabajador ${diner.name}?`,
-      cancel: true,
+      title: 'Desincorporar Trabajador',
+      message: `¿Estás seguro de desactivar al trabajador <strong>${diner.name}</strong>? Quedará inactivo pero podrás reactivarlo en cualquier momento.`,
+      html: true,
+      cancel: { label: 'Cancelar', flat: true },
+      ok: { label: 'Desactivar', color: 'negative' },
       persistent: true
     }).onOk(async () => {
       try {
         await dinersStore.deleteDiner(diner.id)
-        $q.notify({ type: 'positive', message: 'Trabajador eliminado exitosamente' })
+        $q.notify({ type: 'positive', message: 'Trabajador desincorporado exitosamente' })
       } catch (error: any) {
-        $q.notify({ type: 'negative', message: error.data?.message || 'Error al eliminar trabajador' })
+        $q.notify({ type: 'negative', message: error.data?.message || 'Error al desincorporar trabajador' })
       }
     })
   }
 
-  // Método de filtrado local personalizado para q-table
+  const reactivateDiner = (diner: any) => {
+    $q.dialog({
+      title: 'Reactivar Trabajador',
+      message: `¿Desea reactivar a <strong>${diner.name}</strong> (${diner.cedula}) para habilitar su acceso al comedor?`,
+      html: true,
+      cancel: { label: 'Cancelar', flat: true },
+      ok: { label: 'Reactivar', color: 'positive' },
+      persistent: true
+    }).onOk(async () => {
+      try {
+        await dinersStore.reactivateDiner(diner.id)
+        $q.notify({ type: 'positive', message: `¡${diner.name} reactivado exitosamente!` })
+      } catch (error: any) {
+        $q.notify({ type: 'negative', message: error.data?.message || 'Error al reactivar trabajador' })
+      }
+    })
+  }
+
   const customFilter = (rows: readonly any[], terms: any) => {
     return rows.filter(row => {
-      // 1. Filtrado por texto libre (Cédula o Nombre)
       if (terms.search) {
         const s = terms.search.toLowerCase()
         const matchCedula = row.cedula?.toLowerCase().includes(s)
@@ -189,7 +221,6 @@ export function useWorkersTable(formDataDependencyId: any) {
         if (!matchCedula && !matchName) return false
       }
       
-      // 2. Filtrado exacto por Selects
       if (terms.siteId && row.siteId !== terms.siteId) return false
       if (terms.positionId && row.positionId !== terms.positionId) return false
       if (terms.rationType && row.rationType !== terms.rationType) return false
@@ -198,12 +229,10 @@ export function useWorkersTable(formDataDependencyId: any) {
     })
   }
 
-  // Watchers para los filtros de Admin Global
   watch(filterDependencyId, (newVal) => {
-    // Al cambiar la dependencia, limpiamos la subdependencia y la tabla
     filterSubdependencyId.value = null
     if (newVal) {
-      dinersStore.fetchAll({ dependencyId: newVal })
+      dinersStore.fetchAll({ dependencyId: newVal, status: filterStatus.value })
     } else {
       dinersStore.diners = []
     }
@@ -211,17 +240,23 @@ export function useWorkersTable(formDataDependencyId: any) {
 
   watch(filterSubdependencyId, (newVal) => {
     if (newVal) {
-      dinersStore.fetchAll({ subdependencyId: newVal })
+      dinersStore.fetchAll({ subdependencyId: newVal, status: filterStatus.value })
     } else if (filterDependencyId.value) {
-      dinersStore.fetchAll({ dependencyId: filterDependencyId.value })
+      dinersStore.fetchAll({ dependencyId: filterDependencyId.value, status: filterStatus.value })
     } else {
       dinersStore.diners = []
     }
   })
 
+  watch(filterStatus, () => {
+    fetchCurrentDiners()
+  })
+
   return {
     filterDependencyId,
     filterSubdependencyId,
+    filterStatus,
+    statusOptions,
     filterState,
     rationOptions,
     squadOptions,
@@ -235,6 +270,8 @@ export function useWorkersTable(formDataDependencyId: any) {
     userDependencyName,
     columns,
     deleteDiner,
+    reactivateDiner,
+    fetchCurrentDiners,
     customFilter
   }
 }

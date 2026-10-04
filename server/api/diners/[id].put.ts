@@ -31,7 +31,7 @@ export default defineApiHandler(async (event) => {
     where: { id: dinerId }
   })
 
-  if (!currentDiner || !currentDiner.active) {
+  if (!currentDiner) {
     throw new NotFoundError('Comensal', String(dinerId))
   }
 
@@ -74,7 +74,7 @@ export default defineApiHandler(async (event) => {
     }
   }
 
-  // 5. Actualizar
+  // 5. Actualizar (incluyendo estado active si viene provisto)
   const updatedDiner = await dinerRepo.updateDiner(dinerId, {
     cedula: body.cedula,
     name: body.name,
@@ -82,7 +82,8 @@ export default defineApiHandler(async (event) => {
     squadId: body.squadId ? Number(body.squadId) : undefined,
     subdependencyId: finalSubdependencyId,
     siteId: hasSiteId ? siteId : undefined,
-    positionId: body.positionId ? Number(body.positionId) : undefined
+    positionId: body.positionId ? Number(body.positionId) : undefined,
+    active: body.active !== undefined ? Boolean(body.active) : undefined
   })
 
   emitEvent('diner:updated', { diner: updatedDiner })

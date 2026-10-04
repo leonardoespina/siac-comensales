@@ -53,6 +53,8 @@ const {
 const {
   filterDependencyId,
   filterSubdependencyId,
+  filterStatus,
+  statusOptions,
   filterState,
   rationOptions,
   squadOptions,
@@ -66,6 +68,7 @@ const {
   userDependencyName,
   columns,
   deleteDiner,
+  reactivateDiner,
   customFilter,
 } = useWorkersTable(computed(() => formData.value.dependencyId));
 
@@ -126,7 +129,7 @@ onMounted(() => {
                   !authStore.user?.dependencyId
                 "
               >
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-sm-6 col-md-3">
                   <q-select
                     v-model="filterDependencyId"
                     :options="dependencyOptions"
@@ -144,7 +147,14 @@ onMounted(() => {
 
               <!-- El filtro de Subdependencia lo deben ver los Globales y los Gerentes Generales (que no tienen subdependencia asignada) -->
               <template v-if="!authStore.user?.subdependencyId">
-                <div class="col-12 col-md-4">
+                <div
+                  :class="
+                    authStore.hasPermission('GLOBAL_ACCESS', 'canRead') &&
+                    !authStore.user?.dependencyId
+                      ? 'col-12 col-sm-6 col-md-3'
+                      : 'col-12 col-sm-6 col-md-4'
+                  "
+                >
                   <q-select
                     v-model="filterSubdependencyId"
                     :options="filterSubdependencyOptions"
@@ -156,16 +166,47 @@ onMounted(() => {
                     outlined
                     dense
                     clearable
-                    :disable="authStore.hasPermission('GLOBAL_ACCESS', 'canRead') && !authStore.user?.dependencyId && !filterDependencyId"
+                    :disable="
+                      authStore.hasPermission('GLOBAL_ACCESS', 'canRead') &&
+                      !authStore.user?.dependencyId &&
+                      !filterDependencyId
+                    "
                   />
                 </div>
               </template>
 
+              <!-- Filtro de Estado (Activos / Inactivos / Todos) -->
               <div
                 :class="
                   !authStore.user?.subdependencyId
-                    ? 'col-12 col-md-4'
-                    : 'col-12 col-md-4 offset-md-8'
+                    ? authStore.hasPermission('GLOBAL_ACCESS', 'canRead') &&
+                      !authStore.user?.dependencyId
+                      ? 'col-12 col-sm-6 col-md-3'
+                      : 'col-12 col-sm-6 col-md-4'
+                    : 'col-12 col-sm-6 col-md-4'
+                "
+              >
+                <q-select
+                  v-model="filterStatus"
+                  :options="statusOptions"
+                  option-value="value"
+                  option-label="label"
+                  label="Estado de Registro"
+                  emit-value
+                  map-options
+                  outlined
+                  dense
+                />
+              </div>
+
+              <div
+                :class="
+                  !authStore.user?.subdependencyId
+                    ? authStore.hasPermission('GLOBAL_ACCESS', 'canRead') &&
+                      !authStore.user?.dependencyId
+                      ? 'col-12 col-sm-6 col-md-3'
+                      : 'col-12 col-sm-6 col-md-4'
+                    : 'col-12 col-sm-6 col-md-8'
                 "
               >
                 <q-input
@@ -244,8 +285,22 @@ onMounted(() => {
               v-model:selected="selectedDiners"
               flat
               bordered
-              no-data-label="Registra a tu primer trabajador usando el botón de arriba."
+              no-data-label="No se encontraron comensales con los filtros seleccionados."
             >
+              <template v-slot:body-cell-status="props">
+                <q-td :props="props">
+                  <q-chip
+                    dense
+                    size="sm"
+                    :color="props.row.active !== false ? 'positive' : 'grey-7'"
+                    text-color="white"
+                    :icon="props.row.active !== false ? 'check_circle' : 'block'"
+                  >
+                    {{ props.row.active !== false ? "Activo" : "Inactivo" }}
+                  </q-chip>
+                </q-td>
+              </template>
+
               <template v-slot:body-cell-actions="props">
                 <q-td :props="props">
                   <q-btn
@@ -259,6 +314,18 @@ onMounted(() => {
                     <q-tooltip>Editar Trabajador</q-tooltip>
                   </q-btn>
                   <q-btn
+                    v-if="props.row.active === false"
+                    flat
+                    round
+                    color="positive"
+                    icon="restore_from_trash"
+                    size="sm"
+                    @click="reactivateDiner(props.row)"
+                  >
+                    <q-tooltip>Reactivar Trabajador</q-tooltip>
+                  </q-btn>
+                  <q-btn
+                    v-else
                     flat
                     round
                     color="negative"
@@ -266,7 +333,7 @@ onMounted(() => {
                     size="sm"
                     @click="deleteDiner(props.row)"
                   >
-                    <q-tooltip>Eliminar Trabajador</q-tooltip>
+                    <q-tooltip>Desincorporar Trabajador</q-tooltip>
                   </q-btn>
                 </q-td>
               </template>
@@ -276,8 +343,19 @@ onMounted(() => {
                 <div class="q-pa-xs col-12 col-sm-6 col-md-4">
                   <q-card bordered flat class="bg-white">
                     <q-card-section class="q-pb-xs">
-                      <div class="text-weight-bold text-subtitle1">
-                        {{ props.row.name }}
+                      <div class="row items-center justify-between no-wrap">
+                        <div class="text-weight-bold text-subtitle1 ellipsis">
+                          {{ props.row.name }}
+                        </div>
+                        <q-chip
+                          dense
+                          size="xs"
+                          :color="props.row.active !== false ? 'positive' : 'grey-7'"
+                          text-color="white"
+                          :icon="props.row.active !== false ? 'check_circle' : 'block'"
+                        >
+                          {{ props.row.active !== false ? "Activo" : "Inactivo" }}
+                        </q-chip>
                       </div>
                       <div class="text-caption text-grey-8">
                         <q-icon name="badge" class="q-mr-xs" />
@@ -319,6 +397,18 @@ onMounted(() => {
                           <q-tooltip>Editar Trabajador</q-tooltip>
                         </q-btn>
                         <q-btn
+                          v-if="props.row.active === false"
+                          flat
+                          round
+                          color="positive"
+                          icon="restore_from_trash"
+                          size="sm"
+                          @click="reactivateDiner(props.row)"
+                        >
+                          <q-tooltip>Reactivar Trabajador</q-tooltip>
+                        </q-btn>
+                        <q-btn
+                          v-else
                           flat
                           round
                           color="negative"
@@ -326,7 +416,7 @@ onMounted(() => {
                           size="sm"
                           @click="deleteDiner(props.row)"
                         >
-                          <q-tooltip>Eliminar Trabajador</q-tooltip>
+                          <q-tooltip>Desincorporar Trabajador</q-tooltip>
                         </q-btn>
                       </div>
                     </q-card-actions>
@@ -487,6 +577,19 @@ onMounted(() => {
             emit-value
             map-options
             label="Asignar a Cuadrilla"
+            outlined
+            dense
+          />
+          <q-select
+            v-if="isEdit"
+            v-model="formData.active"
+            :options="[
+              { label: 'Activo (Habilitado para Comedor)', value: true },
+              { label: 'Inactivo (Desincorporado)', value: false }
+            ]"
+            emit-value
+            map-options
+            label="Estado del Comensal"
             outlined
             dense
           />

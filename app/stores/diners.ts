@@ -18,12 +18,13 @@ export const useDinersStore = defineStore('diners', {
   }),
   
   actions: {
-    async fetchAll(params?: { subdependencyId?: number | null, dependencyId?: number | null }) {
+    async fetchAll(params?: { subdependencyId?: number | null, dependencyId?: number | null, status?: string | null }) {
       this.isLoading = true
       try {
         const query = new URLSearchParams()
         if (params?.subdependencyId) query.append('subdependencyId', params.subdependencyId.toString())
         if (params?.dependencyId) query.append('dependencyId', params.dependencyId.toString())
+        if (params?.status) query.append('status', params.status.toString())
         
         const url = query.toString() ? `/api/diners?${query.toString()}` : '/api/diners'
         const data = await $fetch(url)
@@ -52,7 +53,7 @@ export const useDinersStore = defineStore('diners', {
       }
     },
     
-    async updateDiner(id: number, data: { cedula: string, name: string, rationType: string, squadId: number, subdependencyId?: number | null, positionId?: number | null, siteId?: number | null }) {
+    async updateDiner(id: number, data: { cedula?: string, name?: string, rationType?: string, squadId?: number, subdependencyId?: number | null, positionId?: number | null, siteId?: number | null, active?: boolean }) {
       this.isLoading = true
       try {
         const result = await $fetch(`/api/diners/${id}`, {
@@ -69,13 +70,20 @@ export const useDinersStore = defineStore('diners', {
       }
     },
 
+    async reactivateDiner(id: number) {
+      return await this.updateDiner(id, { active: true } as any)
+    },
+
     async deleteDiner(id: number) {
       this.isLoading = true
       try {
         await $fetch(`/api/diners/${id}`, {
           method: 'DELETE'
         })
-        this.diners = this.diners.filter(d => d.id !== id)
+        const item = this.diners.find(d => d.id === id)
+        if (item) {
+          item.active = false
+        }
       } finally {
         this.isLoading = false
       }

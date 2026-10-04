@@ -40,19 +40,23 @@ export default defineApiHandler(async (event) => {
     targetDependency = query.dependencyId ? Number(query.dependencyId) : undefined
   }
 
-  // 2. Ejecutar la búsqueda basada en los filtros ya seguros
+  // 2. Resolver el filtro de estado (ACTIVE, INACTIVE o ALL)
+  const rawStatus = query.status ? String(query.status).toUpperCase() : (query.includeInactive === 'true' ? 'ALL' : 'ACTIVE')
+  const status: dinerRepo.DinerStatusFilter = (rawStatus === 'INACTIVE' || rawStatus === 'ALL') ? rawStatus : 'ACTIVE'
+
+  // 3. Ejecutar la búsqueda basada en los filtros ya seguros
   const allowedSiteIds = isGlobal ? undefined : (user.siteIds || [])
 
   if (targetSubdependency) {
-    return await dinerRepo.getDinersBySubdependency(targetSubdependency, undefined, isGlobal, allowedSiteIds)
+    return await dinerRepo.getDinersBySubdependency(targetSubdependency, undefined, status, allowedSiteIds)
   }
 
   if (targetSubdependencies && targetSubdependencies.length > 0) {
-    return await dinerRepo.getDinersBySubdependencies(targetSubdependencies, isGlobal, allowedSiteIds)
+    return await dinerRepo.getDinersBySubdependencies(targetSubdependencies, status, allowedSiteIds)
   }
   
   if (targetDependency) {
-    return await dinerRepo.getDinersByDependency(targetDependency, isGlobal, allowedSiteIds)
+    return await dinerRepo.getDinersByDependency(targetDependency, status, allowedSiteIds)
   }
 
   // Si no hay filtros válidos, devolvemos vacío

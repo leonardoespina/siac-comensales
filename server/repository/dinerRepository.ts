@@ -12,12 +12,25 @@ import type { Prisma } from '@prisma/client'
 
 // --- COMENSALES (DINERS) ---
 
-export async function getDinersBySubdependency(subdependencyId: number, squadId?: number, includeInactive: boolean = false, allowedSiteIds?: number[]) {
+export type DinerStatusFilter = 'ACTIVE' | 'INACTIVE' | 'ALL' | boolean
+
+function resolveActiveWhere(status?: DinerStatusFilter) {
+  if (status === 'ALL' || status === true) return {}
+  if (status === 'INACTIVE') return { active: false }
+  return { active: true }
+}
+
+export async function getDinersBySubdependency(
+  subdependencyId: number,
+  squadId?: number,
+  status: DinerStatusFilter = 'ACTIVE',
+  allowedSiteIds?: number[]
+) {
   return prisma.diner.findMany({
     where: { 
       subdependencyId,
       ...(squadId && { squadId }),
-      ...(includeInactive ? {} : { active: true }),
+      ...resolveActiveWhere(status),
       ...(allowedSiteIds && allowedSiteIds.length > 0 ? { siteId: { in: allowedSiteIds } } : {})
     },
     include: {
@@ -30,11 +43,15 @@ export async function getDinersBySubdependency(subdependencyId: number, squadId?
   })
 }
 
-export async function getDinersBySubdependencies(subdependencyIds: number[], includeInactive: boolean = false, allowedSiteIds?: number[]) {
+export async function getDinersBySubdependencies(
+  subdependencyIds: number[],
+  status: DinerStatusFilter = 'ACTIVE',
+  allowedSiteIds?: number[]
+) {
   return prisma.diner.findMany({
     where: { 
       subdependencyId: { in: subdependencyIds },
-      ...(includeInactive ? {} : { active: true }),
+      ...resolveActiveWhere(status),
       ...(allowedSiteIds && allowedSiteIds.length > 0 ? { siteId: { in: allowedSiteIds } } : {})
     },
     include: {
@@ -48,13 +65,17 @@ export async function getDinersBySubdependencies(subdependencyIds: number[], inc
   })
 }
 
-export async function getDinersByDependency(dependencyId: number, includeInactive: boolean = false, allowedSiteIds?: number[]) {
+export async function getDinersByDependency(
+  dependencyId: number,
+  status: DinerStatusFilter = 'ACTIVE',
+  allowedSiteIds?: number[]
+) {
   return prisma.diner.findMany({
     where: { 
       subdependency: {
         dependencyId: dependencyId
       },
-      ...(includeInactive ? {} : { active: true }),
+      ...resolveActiveWhere(status),
       ...(allowedSiteIds && allowedSiteIds.length > 0 ? { siteId: { in: allowedSiteIds } } : {})
     },
     include: {
@@ -139,7 +160,16 @@ export async function createDiner(data: { cedula: string, name: string, rationTy
   })
 }
 
-export async function updateDiner(id: number, data: { cedula?: string, name?: string, rationType?: string, squadId?: number, subdependencyId?: number, positionId?: number, siteId?: number }) {
+export async function updateDiner(id: number, data: {
+  cedula?: string
+  name?: string
+  rationType?: string
+  squadId?: number
+  subdependencyId?: number
+  positionId?: number
+  siteId?: number
+  active?: boolean
+}) {
   return prisma.diner.update({
     where: { id },
     data,

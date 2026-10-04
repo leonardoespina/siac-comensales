@@ -22,7 +22,8 @@ export function useWorkerForm() {
     dependencyId: null as number | null,
     subdependencyId: null as number | null,
     positionId: null as number | null,
-    siteId: null as number | null
+    siteId: null as number | null,
+    active: true
   })
 
   function openDialog() {
@@ -36,7 +37,8 @@ export function useWorkerForm() {
       dependencyId: null,
       subdependencyId: authStore.user?.subdependencyId || null,
       positionId: null,
-      siteId: null
+      siteId: null,
+      active: true
     }
     showDialog.value = true
   }
@@ -65,7 +67,8 @@ export function useWorkerForm() {
       dependencyId: depId,
       subdependencyId: diner.subdependencyId,
       positionId: diner.positionId,
-      siteId: diner.siteId || null
+      siteId: diner.siteId || null,
+      active: diner.active !== false
     }
     showDialog.value = true
   }
@@ -95,7 +98,8 @@ export function useWorkerForm() {
           squadId: formData.value.squadId!,
           subdependencyId: formData.value.subdependencyId,
           positionId: formData.value.positionId,
-          siteId: formData.value.siteId
+          siteId: formData.value.siteId,
+          active: formData.value.active
         })
         $q.notify({ type: 'positive', message: 'Comensal actualizado exitosamente' })
       } else {
