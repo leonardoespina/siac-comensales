@@ -141,6 +141,19 @@
                 />
               </div>
               <div class="col-12 col-sm-auto row q-gutter-sm justify-end">
+                <!-- Botón Capturar Foto Remota con Cámara Hikvision -->
+                <q-btn
+                  color="primary"
+                  label="Capturar Foto con Terminal"
+                  icon="camera_alt"
+                  @click="isCaptureModalOpen = true"
+                  :disable="isSyncing || isClearing"
+                  size="md"
+                  unelevated
+                >
+                  <q-tooltip>Enciende la cámara del terminal para tomar y enrolar la foto facial del comensal</q-tooltip>
+                </q-btn>
+
                 <!-- Botón Limpiar / Re-enrolar (Mantenimiento) -->
                 <q-btn
                   outline
@@ -383,12 +396,25 @@
       :diner-name="diner?.name || ''"
       @saved="onFingerprintSaved"
     />
+
+    <!-- ── Modal de Captura y Enrolamiento Facial Remoto Hikvision ───────── -->
+    <BiometricCameraCaptureDialog
+      v-if="diner"
+      v-model="isCaptureModalOpen"
+      :cedula="diner.cedula"
+      :diner-name="diner.name"
+      @enrolled="onFaceEnrolled"
+    />
   </q-page>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import BiometricRegistrationModal from '~/components/comensales/BiometricRegistrationModal.vue'
+import BiometricCameraCaptureDialog from '~/components/biometrics/BiometricCameraCaptureDialog.vue'
 import { useBiometricManagement } from '~/composables/features/useBiometricManagement'
+
+const isCaptureModalOpen = ref(false)
 
 const {
   searchCedula,
@@ -415,6 +441,13 @@ const {
   refreshTerminalHealth,
   isAutoPollingHealth,
 } = useBiometricManagement()
+
+function onFaceEnrolled(result: { photoUrl: string }) {
+  if (diner.value) {
+    facePhotoUrl.value = result.photoUrl
+    facePhotoError.value = false
+  }
+}
 
 // ── Utilidad: formatear timestamp ──────────────────────────────────────────
 function formatCheckedAt(date?: Date): string {

@@ -57,6 +57,7 @@ export const useDiningRoomsStore = defineStore('diningRooms', () => {
     activeDiningRooms,
     isLoading,
     fetchAll,
+    fetchDiningRooms: fetchAll,
     create,
     update,
     remove

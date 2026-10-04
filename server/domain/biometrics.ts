@@ -83,15 +83,26 @@ export interface BiometricDeleteTarget {
   error?: string
 }
 
-export interface BiometricDeleteResult {
-  dinerId: number
+export interface RemoteCaptureInput {
+  diningRoomId: number
   cedula: string
-  targets: BiometricDeleteTarget[]
-  diskCleared: boolean
-  dbCleared: boolean
-  totalSuccess: boolean
 }
 
+export interface RemoteCaptureResult {
+  success: boolean
+  photoUrl: string
+  cedula: string
+  name: string
+  fileSizeKB: number
+  enrolledInDevice: boolean
+  timestamp: Date
+}
+
+export interface LiveSnapshotResult {
+  dataUrl: string
+  fileSizeKB: number
+  timestamp: Date
+}
 
 // ── ERRORES DE DOMINIO BIOMÉTRICO ─────────────────────────────────────────────
 

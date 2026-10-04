@@ -129,8 +129,36 @@ export const useBiometricsStore = defineStore('biometrics', () => {
   }
 
   /**
+   * Obtiene un frame JPEG en vivo (dataUrl base64) de la cámara del terminal.
+   */
+  async function fetchSnapshot(diningRoomId: number): Promise<{ dataUrl: string; fileSizeKB: number; timestamp: Date }> {
+    return await $fetch<{ dataUrl: string; fileSizeKB: number; timestamp: Date }>('/api/biometrics/snapshot', {
+      query: { diningRoomId }
+    })
+  }
+
+  /**
+   * Captura la foto en vivo del terminal y la enrola como rostro oficial del comensal.
+   */
+  async function remoteCaptureFace(diningRoomId: number, cedula: string): Promise<any> {
+    return await $fetch('/api/biometrics/remote-capture', {
+      method: 'POST',
+      body: { diningRoomId, cedula }
+    })
+  }
+
+  /**
+   * Dispara el modo de captura interactivo en la pantalla táctil física del terminal MinMoe.
+   */
+  async function triggerInteractiveCapture(diningRoomId: number, cedula: string): Promise<any> {
+    return await $fetch('/api/biometrics/interactive-capture', {
+      method: 'POST',
+      body: { diningRoomId, cedula }
+    })
+  }
+
+  /**
    * Limpia el resultado de la última sincronización o borrado.
-   * Llamado por el composable al limpiar la búsqueda activa.
    */
   function clearLastSyncResult() {
     lastSyncResult.value = null
@@ -152,6 +180,9 @@ export const useBiometricsStore = defineStore('biometrics', () => {
     syncDinerAcrossAllTerminals,
     clearDinerBiometrics,
     clearLastSyncResult,
+    fetchSnapshot,
+    remoteCaptureFace,
+    triggerInteractiveCapture
   }
 })
 

@@ -82,10 +82,15 @@ export function useDispatchManagement() {
   function setupHikvisionSocket() {
     if (!socket) return
 
-    // Unirse a la sala del comedor seleccionado
-    if (selectedDiningRoomId.value) {
-      socket.emit('join:dining_room', { diningRoomId: selectedDiningRoomId.value })
+    const joinRoom = () => {
+      if (selectedDiningRoomId.value) {
+        socket.emit('join:dining_room', { diningRoomId: selectedDiningRoomId.value })
+      }
     }
+
+    joinRoom()
+    socket.off('connect', joinRoom)
+    socket.on('connect', joinRoom)
 
     // Escuchar detecciones faciales y biométricas en tiempo real
     socket.off('biometric:identified')

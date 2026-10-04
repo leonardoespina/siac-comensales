@@ -18,7 +18,12 @@ Toda la lógica del backend debe separarse estrictamente en estas 4 capas. Si un
 ### 3. CAPA 3: Service (`server/services/`)
 - **Responsabilidad:** Orquestar casos de uso. Decide "QUÉ" hacer combinando el dominio y los repositorios.
 - **Regla Oro:** Toma las decisiones (if/else), coordina transacciones, y emite eventos (`emitEvent`).
-- **Prohibiciones:** PROHIBIDO importar Prisma directamente. PROHIBIDO conocer el entorno HTTP (no recibe `event` de H3, no usa `readBody`). Tamaño MÁXIMO recomendado: 100 líneas.
+- **Prohibiciones:** PROHIBIDO importar Prisma directamente. PROHIBIDO conocer el entorno HTTP (no recibe `event` de H3, no usa `readBody`).
+- 🚨 **LÍMITE ESTRICTO DE TAMAÑO (Anti-Monolito):**
+  - Tamaño máximo recomendado: **100 - 150 líneas**.
+  - **PROHIBIDO crear servicios monolíticos gigantes (+250 líneas).**
+  - Si un servicio crece por manejar múltiples operaciones (ej: hardware, streaming, biometría, sincronización), **ES OBLIGATORIO** modularizarlo en una carpeta de sub-servicios de responsabilidad única:
+    `server/services/<modulo>/` (ej: `hikvisionClient.ts`, `hikvisionFace.ts`, `hikvisionStream.ts`, `index.ts` como fachada).
 
 ### 4. CAPA 4: Handler (`server/api/`)
 - **Responsabilidad:** Adaptador de entrada HTTP. Su único trabajo es traducir el mundo Web (JSON/Params) al mundo del Sistema (Services).

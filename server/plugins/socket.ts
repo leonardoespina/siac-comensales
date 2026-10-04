@@ -15,6 +15,7 @@ export default defineNitroPlugin((nitroApp) => {
         }
       })
       server.__sio = io
+      ;(globalThis as any).__sioInstance = io
 
       console.log('⚡ Socket.io servidor inicializado correctamente.')
 
