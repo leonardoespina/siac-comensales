@@ -62,11 +62,25 @@ export interface BiometricDeleteResult {
   totalSuccess: boolean
 }
 
+export interface StreamSnapshot {
+  diningRoomId: number
+  diningRoomName: string
+  status: 'CONNECTING' | 'CONNECTED' | 'BACKOFF' | 'DOWN' | 'STOPPED'
+  displayStatus: 'CONNECTED' | 'CONNECTING' | 'DOWN'
+  attempt: number
+  lastDataAt: string | null
+  lastError: string | null
+  nextRetryAt: string | null
+  canManualRestart: boolean
+  cooldownRemainingSec: number
+}
+
 // ── STORE ─────────────────────────────────────────────────────────────────────
 
 export const useBiometricsStore = defineStore('biometrics', () => {
   // ── Estado ──────────────────────────────────────────────────────────────────
   const terminalStatuses = ref<TerminalHealthStatus[]>([])
+  const streamStatuses = ref<Record<number, StreamSnapshot>>({})
   const isLoadingHealth = ref(false)
   const isSyncing = ref(false)
   const isClearing = ref(false)
@@ -158,6 +172,33 @@ export const useBiometricsStore = defineStore('biometrics', () => {
   }
 
   /**
+   * Consulta el estado actual de los streams biométricos.
+   */
+  async function fetchStreamStatus(diningRoomId?: number): Promise<StreamSnapshot[]> {
+    const query = diningRoomId ? { diningRoomId } : undefined
+    const snapshots = await $fetch<StreamSnapshot[]>('/api/biometrics/streams', { query })
+    for (const snap of snapshots) {
+      streamStatuses.value[snap.diningRoomId] = snap
+    }
+    return snapshots
+  }
+
+  /**
+   * Solicita la reconexión manual de un stream de comedor.
+   */
+  async function restartStream(diningRoomId: number): Promise<StreamSnapshot> {
+    const result = await $fetch<StreamSnapshot>(`/api/biometrics/streams/${diningRoomId}/restart`, {
+      method: 'POST'
+    })
+    streamStatuses.value[diningRoomId] = result
+    return result
+  }
+
+  function setStreamStatus(snapshot: StreamSnapshot) {
+    streamStatuses.value[snapshot.diningRoomId] = snapshot
+  }
+
+  /**
    * Limpia el resultado de la última sincronización o borrado.
    */
   function clearLastSyncResult() {
@@ -169,6 +210,7 @@ export const useBiometricsStore = defineStore('biometrics', () => {
   return {
     // Estado
     terminalStatuses: readonly(terminalStatuses),
+    streamStatuses: readonly(streamStatuses),
     isLoadingHealth: readonly(isLoadingHealth),
     isSyncing: readonly(isSyncing),
     isClearing: readonly(isClearing),
@@ -177,6 +219,9 @@ export const useBiometricsStore = defineStore('biometrics', () => {
 
     // Acciones
     fetchTerminalHealth,
+    fetchStreamStatus,
+    restartStream,
+    setStreamStatus,
     syncDinerAcrossAllTerminals,
     clearDinerBiometrics,
     clearLastSyncResult,
@@ -184,5 +229,6 @@ export const useBiometricsStore = defineStore('biometrics', () => {
     remoteCaptureFace,
     triggerInteractiveCapture
   }
-})
+}
+)
 

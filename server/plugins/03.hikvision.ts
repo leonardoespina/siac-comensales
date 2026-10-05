@@ -7,36 +7,23 @@
  */
 
 import { eventBus } from '../utils/eventBus'
-import { listActiveBiometricDiningRooms } from '../repository/biometricRepository'
-import { startAlertStreamForDiningRoom, syncDinerAcrossAllTerminals } from '../services/hikvisionService'
-import { HikvisionDeviceConfig } from '../domain/biometrics'
+import {
+  initSupervisorAllStreams,
+  syncDinerAcrossAllTerminals,
+  startStream,
+  stopStream
+} from '../services/hikvisionService'
+import { getDiningRoomDeviceById } from '../repository/biometricRepository'
 import { io } from './socket'
 
 export default defineNitroPlugin(async (nitroApp) => {
-  console.log('📡 [Hikvision Plugin] Inicializando módulo biométrico multi-sede...')
+  console.log('📡 [Hikvision Plugin] Inicializando módulo biométrico multi-sede con supervisor de streams...')
 
-  // 1. Iniciar escuchas alertStream para todos los comedores con biométrico activo
+  // 1. Iniciar el supervisor para todos los comedores con biométrico activo
   try {
-    const activeRooms = await listActiveBiometricDiningRooms()
-    console.log(`📡 [Hikvision Plugin] Comedores configurados para biometría: ${activeRooms.length}`)
-
-    for (const room of activeRooms) {
-      if (!room.deviceIp) continue
-
-      const devConfig: HikvisionDeviceConfig = {
-        diningRoomId: room.id,
-        diningRoomName: room.name,
-        ip: room.deviceIp,
-        port: room.devicePort || 443,
-        user: room.deviceUser || 'admin',
-        password: room.devicePassword || '',
-        enabled: room.deviceEnabled
-      }
-
-      startAlertStreamForDiningRoom(devConfig)
-    }
+    await initSupervisorAllStreams()
   } catch (err: any) {
-    console.error('❌ [Hikvision Plugin] Error al inicializar pool de terminales:', err.message)
+    console.error('❌ [Hikvision Plugin] Error al inicializar supervisor de streams:', err.message)
   }
 
   // 2. Transmitir eventos biométricos detectados hacia Socket.io para la UI del operador
@@ -61,14 +48,35 @@ export default defineNitroPlugin(async (nitroApp) => {
     }
   })
 
-  // 4. Auto-replicación multi-sede en segundo plano ante nuevos enrolamientos detectados
-  eventBus.on('biometric:enrolled', async (event) => {
-    console.log(`🔄 [Hikvision Plugin] Nuevo enrolamiento detectado para cédula ${event.cedula} (ID: ${event.dinerId}). Iniciando auto-replicación multi-sede...`)
+  // 5. Transmitir cambios de estado de streams hacia Socket.io (Canal de comedor y global)
+  eventBus.on('biometric:stream_status_changed', (statusEvent) => {
+    const socketServer = io || (globalThis as any).__sioInstance
+    if (socketServer) {
+      socketServer.to(`dining_room_${statusEvent.diningRoomId}`).emit('biometric:stream_status_changed', statusEvent)
+      socketServer.emit('biometric:stream_status_changed', statusEvent)
+    }
+  })
+
+  // 6. Recarga en caliente si cambia la configuración de un dispositivo desde Comedores
+  eventBus.on('diningRoom:device_updated', async ({ diningRoomId }) => {
     try {
-      const result = await syncDinerAcrossAllTerminals(event.dinerId)
-      console.log(`✅ [Hikvision Plugin] Auto-replicación completada para cédula ${event.cedula}: ${result.totalSuccess ? 'Éxito en todas las sedes' : 'Parcial/Con advertencias'}`)
+      const room = await getDiningRoomDeviceById(diningRoomId)
+      if (!room || !room.deviceIp || !room.deviceEnabled) {
+        stopStream(diningRoomId)
+      } else {
+        startStream({
+          diningRoomId: room.id,
+          diningRoomName: room.name,
+          ip: room.deviceIp,
+          port: room.devicePort || 443,
+          user: room.deviceUser || 'admin',
+          password: room.devicePassword || '',
+          enabled: room.deviceEnabled
+        })
+      }
     } catch (err: any) {
-      console.error(`❌ [Hikvision Plugin] Error en auto-replicación multi-sede para ${event.cedula}:`, err?.message || err)
+      console.error(`❌ [Hikvision Plugin] Error recargando stream para comedor ${diningRoomId}:`, err?.message || err)
     }
   })
 })
+

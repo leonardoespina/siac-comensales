@@ -42,6 +42,8 @@ export type AppEvents = {
   'biometric:identified': { diningRoomId: number, diningRoomName: string, cedula: string, name: string, verifyMode: string, detectedAt: string }
   'biometric:synced': { dinerId: number, cedula: string, success: boolean, targetCount: number }
   'biometric:enrolled': { dinerId: number, cedula: string, sourceDeviceId: number }
+  'biometric:stream_status_changed': { diningRoomId: number, diningRoomName: string, status: string, displayStatus: string, attempt: number, lastDataAt: string | null, lastError: string | null, nextRetryAt: string | null, canManualRestart: boolean, cooldownRemainingSec: number }
+  'diningRoom:device_updated': { diningRoomId: number }
 }
 
 // Singleton in-memory bus (Resistente a HMR de Nuxt en desarrollo)

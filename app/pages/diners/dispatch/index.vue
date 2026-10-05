@@ -24,6 +24,9 @@
               <q-chip v-else color="blue-10" text-color="white" size="xs" icon="lock" class="q-ml-sm">
                 Sede Única Asignada
               </q-chip>
+              <div class="row justify-center q-mt-xs">
+                <BiometricStreamIndicator :dining-room-id="selectedDiningRoomId" />
+              </div>
             </div>
             <div class="text-subtitle2" v-else>Control de acceso y entrega de bandejas en puerta</div>
           </q-card-section>
@@ -229,6 +232,7 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue'
 import BiometricCameraCaptureDialog from '~/components/biometrics/BiometricCameraCaptureDialog.vue'
+import BiometricStreamIndicator from '~/components/biometrics/BiometricStreamIndicator.vue'
 import { useDispatchManagement } from '~/composables/features/useDispatchManagement'
 
 const {
