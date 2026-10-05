@@ -17,6 +17,7 @@ import {
 } from '../../domain/biometricStream'
 import { HikvisionDeviceConfig } from '../../domain/biometrics'
 import { openAlertStreamConnection } from './streamConnection'
+import { handleDetectedAccessEvent } from './stream'
 import { checkTerminalHealth } from './health'
 import { emitEvent } from '../../utils/eventBus'
 import { listActiveBiometricDiningRooms } from '../../repository/biometricRepository'
@@ -122,6 +123,15 @@ export function startStream(device: HikvisionDeviceConfig) {
       if (state!.status !== 'CONNECTED') {
         state!.status = 'CONNECTED'
         notifyStatusChange(state!)
+      }
+
+      for (const data of objects) {
+        const acs = data?.AccessControllerEvent
+        if (acs) {
+          handleDetectedAccessEvent(device, data, acs).catch((err) => {
+            console.error('❌ Error procesando evento de acceso:', err?.message || err)
+          })
+        }
       }
     },
     onClose: (reason) => {
