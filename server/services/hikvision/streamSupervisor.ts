@@ -167,20 +167,10 @@ export function stopStream(diningRoomId: number) {
 function ensureWatchdogRunning() {
   if (watchdogTimer) return
   watchdogTimer = setInterval(async () => {
-    const now = new Date()
-    for (const [, state] of streamRegistry) {
-      if (state.status === 'CONNECTED' && isHeartbeatStale(state.lastDataAt, now, STREAM_HEARTBEAT_TIMEOUT_MS)) {
-        // Sondeo liviano antes de tumbar el stream
-        const health = await checkTerminalHealth(state.device).catch(() => ({ online: false }))
-        if (!health.online) {
-          console.warn(`⚠️ [Hikvision Watchdog] Terminal en ${state.device.diningRoomName} sin respuesta. Forzando reconexión...`)
-          if (state.connection) {
-            state.connection.close()
-          }
-        }
-      }
-    }
-  }, 10000)
+    // El socket TCP (openAlertStreamConnection) administra su propio ciclo de vida
+    // mediante TCP KeepAlive y eventos res.on('close'|'error'|'end').
+    // No cerramos sockets activos en reposo para evitar reconexiones cíclicas en redes con latencia/túneles.
+  }, 60000)
   globalObj.__hikvisionWatchdogTimer = watchdogTimer
 }
 
