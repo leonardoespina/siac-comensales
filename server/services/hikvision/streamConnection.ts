@@ -85,7 +85,7 @@ export function openAlertStreamConnection(
             'Authorization': digestAuth,
             'Accept': '*/*'
           },
-          timeout: 15000
+          timeout: 0 // Desactivado para flujos de eventos multipart persistentes 24/7
         },
         (res) => {
           activeRes = res
