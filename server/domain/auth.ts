@@ -1,8 +1,8 @@
 // ── DOMINIO DE AUTENTICACIÓN Y SESIONES ──────────────────────────────────────
 // Regla Hexagonal: Funciones y constantes puras sin dependencias de Prisma ni HTTP.
 
-// Duración de la sesión activa: 24 Horas continuas (1440 minutos)
-export const SESSION_INACTIVITY_TIMEOUT_MINUTES = 24 * 60
+// Duración de la sesión activa: 365 Días continuos (Kiosco / Punto de Despacho)
+export const SESSION_INACTIVITY_TIMEOUT_MINUTES = 365 * 24 * 60
 
 export interface RolePermissionCheck {
   module: { code: string }

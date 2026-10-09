@@ -38,7 +38,6 @@ export function defineApiHandler(handler: EventHandler): EventHandler {
         })
         throw createError({
           statusCode: error.statusCode,
-          statusMessage: error.message, // Agregado para que el Frontend reciba el texto
           message: error.message,
           data: { code: error.code },
         })

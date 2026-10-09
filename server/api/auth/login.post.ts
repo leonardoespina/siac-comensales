@@ -21,7 +21,7 @@ export default defineApiHandler(async (event) => {
     httpOnly: true,
     secure: getRequestURL(event).protocol === 'https:',
     sameSite: 'lax',
-    maxAge: 60 * 60 * 24 // 24 horas
+    maxAge: 60 * 60 * 24 * 365 // 1 año (31.536.000 segundos)
   })
 
   // Registrar auditoría

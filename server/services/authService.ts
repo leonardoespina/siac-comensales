@@ -52,7 +52,7 @@ export class AuthService {
     emitEvent('session:revoked', { userId: user.id, newSessionId })
 
     // Generar Token JWT con el sessionId firmado
-    const token = signToken({ userId: user.id, sessionId: newSessionId }, '24h')
+    const token = signToken({ userId: user.id, sessionId: newSessionId }, '365d')
 
     const { passwordHash, ...safeUser } = user
 
