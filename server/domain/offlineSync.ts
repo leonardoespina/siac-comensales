@@ -50,6 +50,7 @@ export interface ReconciliationSummary {
   alreadyDispatchedCount: number
   noRequestCount: number
   notFoundCount: number
+  wrongRoomCount: number
   results: ReconciliationRecordResult[]
 }
 

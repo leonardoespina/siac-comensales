@@ -25,6 +25,7 @@ import {
   findApprovedRequestsForDinerDate,
   markRequestDetailDispatched
 } from '../../repository/offlineSyncRepository'
+import { listActiveBiometricDiningRooms } from '../../repository/biometricRepository'
 import { emitEvent } from '../../utils/eventBus'
 
 dayjs.extend(utc)
@@ -81,6 +82,7 @@ export async function reconcileOfflineEvents(
     alreadyDispatchedCount: 0,
     noRequestCount: 0,
     notFoundCount: 0,
+    wrongRoomCount: 0,
     results: []
   }
 
@@ -106,7 +108,46 @@ export async function reconcileOfflineEvents(
     }
 
     const requests = await findApprovedRequestsForDinerDate(diner.id, dayStart, dayEnd)
-    const matchingDetail = requests.find(r => r.request.shiftType === detectedShift)
+    if (requests.length === 0) {
+      summary.noRequestCount++
+      summary.results.push({
+        cedula: candidate.cedula,
+        name: diner.name,
+        detectedAt: candidate.detectedAt,
+        shiftType: detectedShift || 'DESCONOCIDO',
+        status: 'NO_APPROVED_REQUEST',
+        message: 'Sin solicitud aprobada para hoy'
+      })
+      continue
+    }
+
+    // REGLA 1 (Comedor Estricto): El comensal debe tener solicitud aprobada en ESTE comedor
+    const roomRequests = requests.filter(r => r.request.diningRoomId === device.diningRoomId)
+    if (roomRequests.length === 0) {
+      summary.wrongRoomCount++
+      const assignedRoom = requests[0]?.request.diningRoom?.name || 'otro comedor'
+      summary.results.push({
+        cedula: candidate.cedula,
+        name: diner.name,
+        detectedAt: candidate.detectedAt,
+        shiftType: detectedShift || 'DESCONOCIDO',
+        status: 'WRONG_DINING_ROOM',
+        message: `Ración asignada al comedor: ${assignedRoom}. No corresponde a ${device.diningRoomName}`
+      })
+      continue
+    }
+
+    // REGLA 2 (Turno y Horario Estricto): Debe coincidir con el turno del horario detectado
+    let matchingDetail = roomRequests.find(r => r.request.shiftType === detectedShift && r.modality === 'DINE_IN')
+
+    // Si el turno no coincide exactamente por desfase de reloj del terminal pero el comensal
+    // tiene una única solicitud DINE_IN pendiente en este mismo comedor:
+    if (!matchingDetail) {
+      const pendingRoomRequests = roomRequests.filter(r => r.dispatchedAt === null && r.modality === 'DINE_IN')
+      if (pendingRoomRequests.length === 1 && (!detectedShift || detectedShift === 'DESCONOCIDO')) {
+        matchingDetail = pendingRoomRequests[0]
+      }
+    }
 
     if (!matchingDetail) {
       summary.noRequestCount++
@@ -116,7 +157,7 @@ export async function reconcileOfflineEvents(
         detectedAt: candidate.detectedAt,
         shiftType: detectedShift || 'DESCONOCIDO',
         status: 'NO_APPROVED_REQUEST',
-        message: `Sin solicitud aprobada para ${detectedShift || 'este horario'}`
+        message: `Sin solicitud aprobada para ${detectedShift || 'este horario'} en ${device.diningRoomName}`
       })
       continue
     }
@@ -152,3 +193,75 @@ export async function reconcileOfflineEvents(
   emitEvent('biometric:offline_synced', summary)
   return summary
 }
+
+/**
+ * Barre y pagina todos los eventos de la jornada de hoy de un dispositivo
+ * y concilia las raciones pendientes en la base de datos.
+ */
+export async function syncDeviceToday(device: HikvisionDeviceConfig): Promise<ReconciliationSummary> {
+  const todayStr = dayjs().tz('America/Caracas').format('YYYY-MM-DD')
+  const startTime = `${todayStr}T00:00:00`
+  const endTime = `${todayStr}T23:59:59`
+
+  const firstBatch = await fetchAcsEventsFromDevice(device, 0, 30, startTime, endTime)
+  const total = firstBatch.totalMatches
+  if (total === 0 || firstBatch.events.length === 0) {
+    return {
+      diningRoomId: device.diningRoomId,
+      diningRoomName: device.diningRoomName,
+      totalEventsRead: 0,
+      uniqueCandidates: 0,
+      dispatchedCount: 0,
+      alreadyDispatchedCount: 0,
+      noRequestCount: 0,
+      notFoundCount: 0,
+      wrongRoomCount: 0,
+      results: []
+    }
+  }
+
+  const allEvents: OfflineAcsEventRaw[] = [...firstBatch.events]
+  let position = firstBatch.events.length
+
+  while (position < total) {
+    const nextBatch = await fetchAcsEventsFromDevice(device, position, 30, startTime, endTime)
+    if (nextBatch.events.length === 0) break
+    allEvents.push(...nextBatch.events)
+    position += nextBatch.events.length
+  }
+
+  const summary = await reconcileOfflineEvents(device, allEvents)
+  console.log(`📡 [OfflineSync] Sincronización de hoy (${device.diningRoomName}): ${summary.dispatchedCount} raciones conciliadas, ${summary.alreadyDispatchedCount} ya despachadas, ${summary.wrongRoomCount} sede equivocada (${summary.uniqueCandidates} comensales).`)
+  return summary
+}
+
+/**
+ * Itera todos los comedores con biométrico activo y sincroniza la jornada de hoy.
+ */
+export async function syncAllActiveTerminalsToday(): Promise<ReconciliationSummary[]> {
+  const activeRooms = await listActiveBiometricDiningRooms()
+  const summaries: ReconciliationSummary[] = []
+
+  for (const room of activeRooms) {
+    if (!room.deviceIp || !room.deviceEnabled) continue
+    const device: HikvisionDeviceConfig = {
+      diningRoomId: room.id,
+      diningRoomName: room.name,
+      ip: room.deviceIp,
+      port: room.devicePort || 443,
+      user: room.deviceUser || 'admin',
+      password: room.devicePassword || '',
+      enabled: room.deviceEnabled
+    }
+
+    try {
+      const summary = await syncDeviceToday(device)
+      summaries.push(summary)
+    } catch (err: any) {
+      console.error(`⚠️ [OfflineSync] Error sincronizando ${room.name} (${room.deviceIp}):`, err?.message || err)
+    }
+  }
+
+  return summaries
+}
+

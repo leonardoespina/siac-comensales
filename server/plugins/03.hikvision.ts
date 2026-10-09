@@ -11,7 +11,8 @@ import {
   initSupervisorAllStreams,
   syncDinerAcrossAllTerminals,
   startStream,
-  stopStream
+  stopStream,
+  syncAllActiveTerminalsToday
 } from '../services/hikvisionService'
 import { getDiningRoomDeviceById } from '../repository/biometricRepository'
 import { io } from './socket'
@@ -25,6 +26,11 @@ export default defineNitroPlugin(async (nitroApp) => {
   } catch (err: any) {
     console.error('❌ [Hikvision Plugin] Error al inicializar supervisor de streams:', err.message)
   }
+
+  // 1.1 Sincronización automática de eventos de la jornada en segundo plano (recupera eventos diferidos)
+  syncAllActiveTerminalsToday().catch((err: any) => {
+    console.error('⚠️ [Hikvision Plugin] Error en reconciliación automática de arranque:', err?.message || err)
+  })
 
   // 2. Transmitir eventos biométricos detectados hacia Socket.io para la UI del operador
   eventBus.on('biometric:identified', (event) => {
