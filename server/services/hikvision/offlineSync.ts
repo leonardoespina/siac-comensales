@@ -235,33 +235,46 @@ export async function syncDeviceToday(device: HikvisionDeviceConfig): Promise<Re
   return summary
 }
 
+let isSyncRunning = false
+
 /**
  * Itera todos los comedores con biométrico activo y sincroniza la jornada de hoy.
+ * Posee guardia de concurrencia para evitar colisiones entre el cron y reconexiones.
  */
 export async function syncAllActiveTerminalsToday(): Promise<ReconciliationSummary[]> {
-  const activeRooms = await listActiveBiometricDiningRooms()
-  const summaries: ReconciliationSummary[] = []
-
-  for (const room of activeRooms) {
-    if (!room.deviceIp || !room.deviceEnabled) continue
-    const device: HikvisionDeviceConfig = {
-      diningRoomId: room.id,
-      diningRoomName: room.name,
-      ip: room.deviceIp,
-      port: room.devicePort || 443,
-      user: room.deviceUser || 'admin',
-      password: room.devicePassword || '',
-      enabled: room.deviceEnabled
-    }
-
-    try {
-      const summary = await syncDeviceToday(device)
-      summaries.push(summary)
-    } catch (err: any) {
-      console.error(`⚠️ [OfflineSync] Error sincronizando ${room.name} (${room.deviceIp}):`, err?.message || err)
-    }
+  if (isSyncRunning) {
+    console.log('⏳ [OfflineSync] Sincronización en curso, omitiendo ciclo redundante.')
+    return []
   }
+  isSyncRunning = true
 
-  return summaries
+  try {
+    const activeRooms = await listActiveBiometricDiningRooms()
+    const summaries: ReconciliationSummary[] = []
+
+    for (const room of activeRooms) {
+      if (!room.deviceIp || !room.deviceEnabled) continue
+      const device: HikvisionDeviceConfig = {
+        diningRoomId: room.id,
+        diningRoomName: room.name,
+        ip: room.deviceIp,
+        port: room.devicePort || 443,
+        user: room.deviceUser || 'admin',
+        password: room.devicePassword || '',
+        enabled: room.deviceEnabled
+      }
+
+      try {
+        const summary = await syncDeviceToday(device)
+        summaries.push(summary)
+      } catch (err: any) {
+        console.error(`⚠️ [OfflineSync] Error sincronizando ${room.name} (${room.deviceIp}):`, err?.message || err)
+      }
+    }
+
+    return summaries
+  } finally {
+    isSyncRunning = false
+  }
 }
 

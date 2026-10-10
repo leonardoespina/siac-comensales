@@ -27,9 +27,21 @@ export default defineNitroPlugin(async (nitroApp) => {
     console.error('❌ [Hikvision Plugin] Error al inicializar supervisor de streams:', err.message)
   }
 
-  // 1.1 Sincronización automática de eventos de la jornada en segundo plano (recupera eventos diferidos)
+  // 1.1 Sincronización automática de arranque
   syncAllActiveTerminalsToday().catch((err: any) => {
     console.error('⚠️ [Hikvision Plugin] Error en reconciliación automática de arranque:', err?.message || err)
+  })
+
+  // 1.2 Cron periódico: Reconciliación continua cada 10 minutos (600.000 ms)
+  const SYNC_INTERVAL_MS = 10 * 60 * 1000
+  const syncInterval = setInterval(() => {
+    syncAllActiveTerminalsToday().catch((err: any) => {
+      console.error('⚠️ [Hikvision Plugin] Error en reconciliación periódica (10m):', err?.message || err)
+    })
+  }, SYNC_INTERVAL_MS)
+
+  nitroApp.hooks.hook('close', () => {
+    clearInterval(syncInterval)
   })
 
   // 2. Transmitir eventos biométricos detectados hacia Socket.io para la UI del operador
