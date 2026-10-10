@@ -140,11 +140,11 @@ export async function reconcileOfflineEvents(
     // REGLA 2 (Turno y Horario Estricto): Debe coincidir con el turno del horario detectado
     let matchingDetail = roomRequests.find(r => r.request.shiftType === detectedShift && r.modality === 'DINE_IN')
 
-    // Si el turno no coincide exactamente por desfase de reloj del terminal pero el comensal
-    // tiene una única solicitud DINE_IN pendiente en este mismo comedor:
+    // Si el turno no coincide exactamente (por desfase del reloj del terminal antes de sincronizarlo)
+    // pero el comensal tiene una única solicitud DINE_IN pendiente hoy en este mismo comedor:
     if (!matchingDetail) {
       const pendingRoomRequests = roomRequests.filter(r => r.dispatchedAt === null && r.modality === 'DINE_IN')
-      if (pendingRoomRequests.length === 1 && (!detectedShift || detectedShift === 'DESCONOCIDO')) {
+      if (pendingRoomRequests.length === 1) {
         matchingDetail = pendingRoomRequests[0]
       }
     }
