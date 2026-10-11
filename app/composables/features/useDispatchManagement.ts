@@ -77,7 +77,146 @@ export function useDispatchManagement() {
    * }
    * ========================================================================= */
 
-  // ── CONEXIÓN EN TIEMPO REAL HIKVISION (SOCKET.IO) ────────────────────────────
+  // ── MODO EDGE LOCAL (0 MS) Y BYPASS AUTOMÁTICO ─────────────────────────────
+  const isEdgeModePreferred = ref(false)
+  const isEdgeConnected = ref(false)
+  const isEdgeFallbackActive = ref(false)
+  let edgeWs: WebSocket | null = null
+  let edgeReconnectTimer: any = null
+
+  function connectToEdgeAgent() {
+    if (typeof window === 'undefined') return
+    if (edgeWs) {
+      try { edgeWs.close() } catch {}
+      edgeWs = null
+    }
+
+    try {
+      edgeWs = new WebSocket('ws://localhost:3005')
+
+      edgeWs.onopen = () => {
+        isEdgeConnected.value = true
+        isEdgeFallbackActive.value = false
+        console.log('🟢 [useDispatchManagement] Conectado a Kiosk Edge Agent (0 ms).')
+        $q.notify({
+          type: 'positive',
+          message: '🟢 Modo Edge Local Activo (Latencia: 0 ms)',
+          timeout: 2500,
+          position: 'top-right'
+        })
+        // En modo Edge desactivamos el listener central para evitar despachos dobles
+        if (socket) {
+          socket.off('biometric:identified')
+        }
+      }
+
+      edgeWs.onmessage = (msgEvent) => {
+        try {
+          const data = JSON.parse(msgEvent.data)
+          if (data.type === 'dispatch:result') {
+            if (data.success && data.diner) {
+              lastDispatchResult.value = {
+                diner: data.diner,
+                dispatch: { shift: data.diner.shift }
+              }
+              overlayStatus.value = 'success'
+              overlayTitle.value = '¡Buen Provecho!'
+              overlayMessage.value = `${data.diner.name} tiene autorizado su ${data.diner.shift}.`
+              playAlert('SUCCESS')
+            } else {
+              const isAlreadyDispatched = data.code === 'ALREADY_DISPATCHED'
+              overlayStatus.value = 'error'
+              overlayTitle.value = isAlreadyDispatched ? 'Alerta de Duplicidad' : 'Acceso Denegado'
+              overlayMessage.value = data.message || 'No se pudo procesar el despacho.'
+              playAlert(data.code || 'GENERIC_ERROR')
+            }
+
+            setTimeout(() => {
+              overlayStatus.value = 'idle'
+            }, 3500)
+          } else if (data.type === 'edge:sheet_updated') {
+            console.log(`📋 [useDispatchManagement] Padrón de Edge actualizado: ${data.totalApproved} autorizados.`)
+            $q.notify({
+              type: 'info',
+              message: `📋 Padrón local actualizado (${data.totalApproved} comensales)`,
+              timeout: 2500,
+              position: 'bottom-right'
+            })
+          }
+        } catch (e: any) {
+          console.error('❌ Error procesando mensaje de Edge Agent:', e.message)
+        }
+      }
+
+      edgeWs.onclose = () => {
+        const wasConnected = isEdgeConnected.value
+        isEdgeConnected.value = false
+        edgeWs = null
+
+        if (isEdgeModePreferred.value) {
+          isEdgeFallbackActive.value = true
+          console.warn('⚠️ [useDispatchManagement] Agente local desconectado. Activando BYPASS a Servidor Central...')
+          if (wasConnected) {
+            $q.notify({
+              type: 'warning',
+              message: '⚠️ Agente local desconectado. Activando BYPASS a Servidor Central.',
+              timeout: 3000,
+              position: 'top-right'
+            })
+          }
+          // BYPASS AUTOMÁTICO INMEDIATO:
+          setupHikvisionSocket()
+
+          // Reintentar reconexión al agente local cada 6 segundos
+          if (edgeReconnectTimer) clearTimeout(edgeReconnectTimer)
+          edgeReconnectTimer = setTimeout(() => {
+            if (isEdgeModePreferred.value && !isEdgeConnected.value) {
+              connectToEdgeAgent()
+            }
+          }, 6000)
+        }
+      }
+
+      edgeWs.onerror = () => {
+        // El fallo gatilla el onclose que activa el Bypass
+      }
+    } catch {
+      isEdgeConnected.value = false
+      if (isEdgeModePreferred.value) {
+        isEdgeFallbackActive.value = true
+        setupHikvisionSocket()
+      }
+    }
+  }
+
+  function toggleEdgeMode(enabled: boolean) {
+    isEdgeModePreferred.value = enabled
+    localStorage.setItem('dispatch_edge_mode', enabled ? 'true' : 'false')
+
+    if (enabled) {
+      connectToEdgeAgent()
+    } else {
+      isEdgeFallbackActive.value = false
+      isEdgeConnected.value = false
+      if (edgeWs) {
+        try { edgeWs.close() } catch {}
+        edgeWs = null
+      }
+      if (edgeReconnectTimer) {
+        clearTimeout(edgeReconnectTimer)
+        edgeReconnectTimer = null
+      }
+      setupHikvisionSocket()
+      $q.notify({
+        type: 'info',
+        message: '🟡 Modo Servidor Central Activo (Normal)',
+        timeout: 2000,
+        position: 'top-right'
+      })
+    }
+  }
+
+  // ── CONEXIÓN EN TIEMPO REAL HIKVISION (SOCKET.IO CENTRAL) ───────────────────
 
   function setupHikvisionSocket() {
     if (!socket) return
@@ -95,7 +234,7 @@ export function useDispatchManagement() {
     // Escuchar detecciones faciales y biométricas en tiempo real
     socket.off('biometric:identified')
     socket.on('biometric:identified', async (event: any) => {
-      console.log('🔔 [useDispatchManagement] Rostro identificado en tiempo real:', event)
+      console.log('🔔 [useDispatchManagement] Rostro identificado en tiempo real (Central):', event)
 
       // Evitar llamadas concurrentes si ya se está despachando
       if (isSearching.value) return
@@ -111,10 +250,14 @@ export function useDispatchManagement() {
   }
 
   onMounted(async () => {
+    // 1. Cargar comedor guardado
     const savedId = localStorage.getItem('dispatch_dining_room_id')
     if (savedId) {
       selectedDiningRoomId.value = parseInt(savedId, 10)
     }
+
+    // 2. Cargar preferencia de Modo Edge (Default: false -> Central)
+    isEdgeModePreferred.value = localStorage.getItem('dispatch_edge_mode') === 'true'
 
     try {
       const allRooms = await $fetch<any[]>('/api/dining-rooms')
@@ -126,15 +269,19 @@ export function useDispatchManagement() {
         selectedDiningRoomId.value = singleId
         localStorage.setItem('dispatch_dining_room_id', singleId.toString())
         isDiningRoomModalOpen.value = false
-        setupHikvisionSocket()
       } else {
         const isValid = diningRooms.value.some(dr => dr.id === selectedDiningRoomId.value)
         if (!savedId || !isValid) {
           selectedDiningRoomId.value = null
           isDiningRoomModalOpen.value = true
-        } else {
-          setupHikvisionSocket()
         }
+      }
+
+      // Conexión reactiva según preferencia
+      if (isEdgeModePreferred.value) {
+        connectToEdgeAgent()
+      } else {
+        setupHikvisionSocket()
       }
     } catch (error: any) {
       $q.notify({ type: 'negative', message: 'Error al cargar comedores: ' + (error.data?.message || error.message) })
@@ -144,6 +291,14 @@ export function useDispatchManagement() {
   onUnmounted(() => {
     if (socket) {
       socket.off('biometric:identified')
+    }
+    if (edgeWs) {
+      try { edgeWs.close() } catch {}
+      edgeWs = null
+    }
+    if (edgeReconnectTimer) {
+      clearTimeout(edgeReconnectTimer)
+      edgeReconnectTimer = null
     }
   })
 
@@ -256,6 +411,29 @@ export function useDispatchManagement() {
     }
   }
 
+  async function refreshEdgeSheet() {
+    if (!isEdgeConnected.value) return
+    try {
+      const res = await fetch('http://localhost:3005/refresh', { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        $q.notify({
+          type: 'positive',
+          message: '📋 Padrón sincronizado con Servidor Central',
+          timeout: 2000,
+          position: 'top-right'
+        })
+      }
+    } catch {
+      $q.notify({
+        type: 'negative',
+        message: 'No se pudo contactar al agente local',
+        timeout: 2500,
+        position: 'top-right'
+      })
+    }
+  }
+
   return {
     searchCedula,
     isSearching: readonly(isSearching),
@@ -273,6 +451,11 @@ export function useDispatchManagement() {
     processManualDispatch,
     clearSearch,
     stopKioskLoop,
-    capturedImage: readonly(capturedImage)
+    capturedImage: readonly(capturedImage),
+    isEdgeModePreferred: readonly(isEdgeModePreferred),
+    isEdgeConnected: readonly(isEdgeConnected),
+    isEdgeFallbackActive: readonly(isEdgeFallbackActive),
+    toggleEdgeMode,
+    refreshEdgeSheet
   }
 }

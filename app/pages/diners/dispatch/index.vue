@@ -24,8 +24,62 @@
               <q-chip v-else color="blue-10" text-color="white" size="xs" icon="lock" class="q-ml-sm">
                 Sede Única Asignada
               </q-chip>
-              <div class="row justify-center q-mt-xs">
-                <BiometricStreamIndicator :dining-room-id="selectedDiningRoomId" />
+              <div class="row justify-center items-center q-mt-xs q-gutter-xs">
+                <!-- Indicador del Servidor Central (solo visible en Modo Central o Fallback) -->
+                <BiometricStreamIndicator v-if="!isEdgeConnected" :dining-room-id="selectedDiningRoomId" />
+                
+                <!-- Indicador Dinámico de Modo Edge / Bypass -->
+                <q-chip 
+                  v-if="isEdgeConnected" 
+                  color="positive" 
+                  text-color="white" 
+                  size="xs" 
+                  icon="bolt"
+                  clickable
+                  @click="toggleEdgeMode(false)"
+                >
+                  Edge Local (0 ms)
+                  <q-tooltip>Validación local activa (0 ms). Clic para volver a Modo Central</q-tooltip>
+                </q-chip>
+
+                <q-btn
+                  v-if="isEdgeConnected"
+                  flat
+                  round
+                  dense
+                  size="xs"
+                  color="white"
+                  icon="refresh"
+                  @click="refreshEdgeSheet"
+                >
+                  <q-tooltip>Sincronizar padrón con Servidor Central ahora</q-tooltip>
+                </q-btn>
+
+                <q-chip 
+                  v-else-if="isEdgeFallbackActive" 
+                  color="warning" 
+                  text-color="dark" 
+                  size="xs" 
+                  icon="wifi_protected_setup"
+                  clickable
+                  @click="toggleEdgeMode(false)"
+                >
+                  Bypass Central
+                  <q-tooltip>Agente local desconectado (Bypass activo). Clic para volver a Modo Central</q-tooltip>
+                </q-chip>
+
+                <q-chip 
+                  v-else 
+                  color="blue-9" 
+                  text-color="white" 
+                  size="xs" 
+                  icon="cloud"
+                  clickable
+                  @click="toggleEdgeMode(true)"
+                >
+                  Modo Central
+                  <q-tooltip>Clic aquí para activar Agente Local MSB (0 ms)</q-tooltip>
+                </q-chip>
               </div>
             </div>
             <div class="text-subtitle2" v-else>Control de acceso y entrega de bandejas en puerta</div>
@@ -209,6 +263,23 @@
               <q-icon name="storefront" />
             </template>
           </q-select>
+          <q-separator class="q-my-md" />
+
+          <!-- Configuración de Modo Local (Persistente en LocalStorage) -->
+          <div class="row items-center justify-between">
+            <q-toggle
+              :model-value="isEdgeModePreferred"
+              @update:model-value="toggleEdgeMode"
+              label="Activar Agente Local MSB (0 ms con Bypass)"
+              color="positive"
+            />
+            <q-icon name="bolt" color="positive" size="sm">
+              <q-tooltip>
+                Conecta esta máquina con el Kiosk Edge Agent en localhost:3005 para despacho instantáneo.
+                Si el agente se apaga, conmuta automáticamente al Servidor Central sin detener el servicio.
+              </q-tooltip>
+            </q-icon>
+          </div>
         </q-card-section>
 
         <q-card-actions align="right" class="text-primary">
@@ -249,7 +320,12 @@ const {
   saveDiningRoomSelection,
   processManualDispatch,
   clearSearch,
-  stopKioskLoop
+  stopKioskLoop,
+  isEdgeModePreferred,
+  isEdgeConnected,
+  isEdgeFallbackActive,
+  toggleEdgeMode,
+  refreshEdgeSheet
 } = useDispatchManagement()
 
 const tempDiningRoomId = ref<number | null>(null)
