@@ -17,6 +17,7 @@ import {
 } from '../../domain/biometrics'
 import { fetchDeviceChallenge, buildDigestAuthHeader } from './client'
 import { extractJsonObjectsFromBuffer, handleDetectedAccessEvent } from './stream'
+import { openAcsPollingConnection } from './acsPolling'
 
 // Agent global persistente para reutilizar sockets HTTPS sin reconstruir
 const sharedHttpsAgent = new https.Agent({
@@ -42,10 +43,15 @@ export function openAlertStreamConnection(
   let isClosed = false
   let activeReq: http.ClientRequest | null = null
   let activeRes: http.IncomingMessage | null = null
+  let fallbackConnection: { close: () => void } | null = null
 
   const safeClose = (reason: string) => {
     if (isClosed) return
     isClosed = true
+    if (fallbackConnection) {
+      fallbackConnection.close()
+      fallbackConnection = null
+    }
     if (activeRes) {
       activeRes.removeAllListeners()
       activeRes.destroy()
@@ -92,6 +98,12 @@ export function openAlertStreamConnection(
 
           if (res.statusCode !== 200) {
             res.resume()
+            if (res.statusCode === 404 || res.statusCode === 400) {
+              console.log(`⚡ [StreamConnection] alertStream retornó HTTP ${res.statusCode} en ${device.diningRoomName}. Conmutando automáticamente a AcsEvent...`)
+              if (isClosed) return
+              fallbackConnection = openAcsPollingConnection(device, callbacks)
+              return
+            }
             safeClose(`Respuesta HTTP no válida: ${res.statusCode}`)
             return
           }
