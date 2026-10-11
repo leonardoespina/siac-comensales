@@ -1,0 +1,9 @@
+{
+  "centralServerUrl": "http://10.60.0.21:8080",
+  "tunnelServerUrl": "https://comensales.lespina.info",
+  "localDevUrl": "http://localhost:3000",
+  "diningRoomId": 2,
+  "edgePort": 3005,
+  "refreshIntervalMinutes": 5,
+  "pollIntervalMs": 180
+}
