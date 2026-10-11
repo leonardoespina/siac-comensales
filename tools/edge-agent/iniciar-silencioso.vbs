@@ -1,3 +1,3 @@
 Set WshShell = CreateObject("WScript.Shell")
 strPath = WshShell.CurrentDirectory
-WshShell.Run "cmd /c cd /d """ & strPath & """ && npx tsx edgeServer.ts", 0, False
+WshShell.Run "cmd /c cd /d """ & strPath & """ && node server.cjs", 0, False

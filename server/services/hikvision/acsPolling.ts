@@ -45,7 +45,8 @@ export function openAcsPollingConnection(
             searchResultPosition: 0,
             maxResults: 1,
             major: 0,
-            minor: 0
+            minor: 0,
+            timeReverseOrder: true
           }
         }),
         'application/json; charset=UTF-8',
@@ -54,7 +55,8 @@ export function openAcsPollingConnection(
 
       if (isClosed) return
       const initData = JSON.parse(initRes.data)
-      lastSeenSerial = initData.AcsEvent?.totalMatches || 0
+      const topEv = initData.AcsEvent?.InfoList?.[0]
+      lastSeenSerial = topEv?.serialNo || initData.AcsEvent?.totalMatches || 0
       console.log(`⚡ [AcsPolling] Modo MinMoe activado para ${device.diningRoomName}. Serial base: #${lastSeenSerial}`)
 
       // Notificar al menos un tick inicial para que el supervisor marque estado CONNECTED
@@ -65,12 +67,15 @@ export function openAcsPollingConnection(
       return
     }
 
-    // 2. Loop de lectura secuencial periódica
+    // 2. Loop de lectura secuencial periódica de alta velocidad (Reverse Order + Ventana temporal)
+    const pad = (n: number) => String(n).padStart(2, '0')
     const pollLoop = async () => {
       if (isClosed) return
 
       try {
-        const queryOffset = Math.max(0, lastSeenSerial - 2)
+        const now = new Date(Date.now() - 60000)
+        const startTime = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}-04:00`
+
         const res = await executeIsapiRequest(
           device,
           '/ISAPI/AccessControl/AcsEvent?format=json',
@@ -78,10 +83,12 @@ export function openAcsPollingConnection(
           JSON.stringify({
             AcsEventCond: {
               searchID: `poll_${Date.now()}`,
-              searchResultPosition: queryOffset,
-              maxResults: 15,
-              major: 5,
-              minor: 75
+              searchResultPosition: 0,
+              maxResults: 5,
+              major: 0,
+              minor: 0,
+              startTime,
+              timeReverseOrder: true
             }
           }),
           'application/json; charset=UTF-8',
@@ -90,26 +97,37 @@ export function openAcsPollingConnection(
 
         if (isClosed) return
 
-        if (res.statusCode === 200) {
+        if (res.statusCode === 200 && res.data.trim().startsWith('{')) {
           const parsed = JSON.parse(res.data)
-          const infoList: any[] = parsed?.AcsEvent?.InfoList || []
+          // Orden cronológico (antiguo a nuevo) para procesar ordenadamente
+          const infoList: any[] = (parsed?.AcsEvent?.InfoList || []).slice().reverse()
           const adaptedObjects: any[] = []
 
           for (const item of infoList) {
             const serial = item.serialNo || 0
             if (serial > lastSeenSerial) {
-              lastSeenSerial = serial
-              adaptedObjects.push({
-                dateTime: item.time,
-                AccessControllerEvent: {
-                  employeeNoString: item.employeeNoString || (item.employeeNo ? String(item.employeeNo) : ''),
-                  name: item.name,
-                  currentVerifyMode: item.currentVerifyMode || 'face',
-                  verifyMode: item.currentVerifyMode || 'face',
-                  serialNo: item.serialNo,
-                  time: item.time
-                }
-              })
+              lastSeenSerial = Math.max(lastSeenSerial, serial)
+
+              // Anti-ráfaga: si el evento ocurrió hace más de 25 segundos, es histórico (no "escupir" a pantalla)
+              const eventTime = item.time ? new Date(item.time).getTime() : Date.now()
+              if (Date.now() - eventTime > 25000) {
+                continue
+              }
+
+              const rawId = item.employeeNoString || (item.employeeNo ? String(item.employeeNo) : '') || item.cardNo || ''
+              if (rawId && (item.minor === 75 || item.minor === 38 || item.minor === 1 || item.name)) {
+                adaptedObjects.push({
+                  dateTime: item.time,
+                  AccessControllerEvent: {
+                    employeeNoString: rawId,
+                    name: item.name,
+                    currentVerifyMode: item.currentVerifyMode || 'face',
+                    verifyMode: item.currentVerifyMode || 'face',
+                    serialNo: item.serialNo,
+                    time: item.time
+                  }
+                })
+              }
             }
           }
 

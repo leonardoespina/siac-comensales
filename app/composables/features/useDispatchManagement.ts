@@ -207,6 +207,10 @@ export function useDispatchManagement() {
         edgeReconnectTimer = null
       }
       setupHikvisionSocket()
+      // Enlace transparente: asegurar que el servidor central tenga el stream vivo y fresco
+      if (selectedDiningRoomId.value) {
+        $fetch(`/api/biometrics/streams/${selectedDiningRoomId.value}/restart`, { method: 'POST' }).catch(() => {})
+      }
       $q.notify({
         type: 'info',
         message: '🟡 Modo Servidor Central Activo (Normal)',

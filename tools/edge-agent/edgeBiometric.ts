@@ -55,53 +55,95 @@ function buildDigestHeader(
   }
 }
 
+// Agentes HTTP/HTTPS persistentes para reutilizar sockets sin renegociar TLS
+const sharedHttpsAgent = new https.Agent({
+  rejectUnauthorized: false,
+  keepAlive: true,
+  maxSockets: 20
+})
+
+const sharedHttpAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: 20
+})
+
+// Caché de retos criptográficos por IP para no pedir reto en cada ciclo
+const challengeCache = new Map<string, Record<string, string>>()
+
+async function fetchChallenge(config: TerminalConfig): Promise<Record<string, string>> {
+  const baseUrl = `https://${config.ip}:${config.port || 443}`
+  const challengeUrl = new URL('/ISAPI/System/deviceInfo', baseUrl)
+  const isHttps = challengeUrl.protocol === 'https:'
+  const requestModule = isHttps ? https : http
+  const agent = isHttps ? sharedHttpsAgent : sharedHttpAgent
+
+  return new Promise((resolve, reject) => {
+    const req = requestModule.request(challengeUrl, { method: 'GET', agent, timeout: 3000 }, (res) => {
+      const authHeader = res.headers['www-authenticate']
+      if (authHeader) {
+        const chal = parseDigestHeader(authHeader)
+        challengeCache.set(config.ip, chal)
+        resolve(chal)
+      } else {
+        reject(new Error(`Respuesta sin reto Digest [HTTP ${res.statusCode}]`))
+      }
+    })
+    req.on('error', reject)
+    req.on('timeout', () => { req.destroy(); reject(new Error('Timeout de reto')) })
+    req.end()
+  })
+}
+
 async function executeIsapiRequest(
   config: TerminalConfig,
   endpoint: string,
   method = 'GET',
   bodyData?: string
 ): Promise<{ statusCode: number; data: string }> {
+  let challenge = challengeCache.get(config.ip)
+  if (!challenge) {
+    challenge = await fetchChallenge(config)
+  }
+
   const baseUrl = `https://${config.ip}:${config.port || 443}`
-  const challengeUrl = new URL('/ISAPI/System/deviceInfo', baseUrl)
   const targetUrl = new URL(endpoint, baseUrl)
   const isHttps = targetUrl.protocol === 'https:'
   const requestModule = isHttps ? https : http
-  const agent = isHttps ? new https.Agent({ rejectUnauthorized: false, keepAlive: true }) : undefined
+  const agent = isHttps ? sharedHttpsAgent : sharedHttpAgent
 
-  // 1. Obtener challenge
-  const challenge = await new Promise<Record<string, string>>((resolve, reject) => {
-    const req = requestModule.request(challengeUrl, { method: 'GET', agent, timeout: 4000 }, (res) => {
-      const authHeader = res.headers['www-authenticate']
-      if (authHeader) resolve(parseDigestHeader(authHeader))
-      else reject(new Error(`Respuesta sin reto Digest [HTTP ${res.statusCode}]`))
+  const sendWithChallenge = (chal: Record<string, string>): Promise<{ statusCode: number; data: string }> => {
+    return new Promise((resolve, reject) => {
+      const authHeader = buildDigestHeader(method, targetUrl.pathname + targetUrl.search, chal, config.user, config.password)
+      const headers: Record<string, string> = {
+        'Authorization': authHeader,
+        'Accept': '*/*'
+      }
+      if (bodyData) {
+        headers['Content-Type'] = 'application/json'
+        headers['Content-Length'] = Buffer.byteLength(bodyData).toString()
+      }
+
+      const req = requestModule.request(targetUrl, { method, agent, headers, timeout: 4000 }, (res) => {
+        let data = ''
+        res.on('data', chunk => { data += chunk })
+        res.on('end', () => resolve({ statusCode: res.statusCode || 500, data }))
+      })
+      req.on('error', reject)
+      req.on('timeout', () => { req.destroy(); reject(new Error('Timeout petición ISAPI')) })
+      if (bodyData) req.write(bodyData)
+      req.end()
     })
-    req.on('error', reject)
-    req.on('timeout', () => { req.destroy(); reject(new Error('Timeout de reto')) })
-    req.end()
-  })
-
-  // 2. Ejecutar petición con auth
-  const authHeader = buildDigestHeader(method, targetUrl.pathname + targetUrl.search, challenge, config.user, config.password)
-  const headers: Record<string, string> = {
-    'Authorization': authHeader,
-    'Accept': '*/*'
-  }
-  if (bodyData) {
-    headers['Content-Type'] = 'application/json'
-    headers['Content-Length'] = Buffer.byteLength(bodyData).toString()
   }
 
-  return new Promise<{ statusCode: number; data: string }>((resolve, reject) => {
-    const req = requestModule.request(targetUrl, { method, agent, headers, timeout: 5000 }, (res) => {
-      let data = ''
-      res.on('data', chunk => { data += chunk })
-      res.on('end', () => resolve({ statusCode: res.statusCode || 500, data }))
-    })
-    req.on('error', reject)
-    req.on('timeout', () => { req.destroy(); reject(new Error('Timeout petición ISAPI')) })
-    if (bodyData) req.write(bodyData)
-    req.end()
-  })
+  let res = await sendWithChallenge(challenge)
+
+  // Si el terminal expira el nonce (HTTP 401), renovar reto y reintentar inmediatamente una vez
+  if (res.statusCode === 401) {
+    challenge = await fetchChallenge(config)
+    res = await sendWithChallenge(challenge)
+  }
+
+  return res
 }
 
 export function startLocalBiometricStream(
@@ -125,7 +167,7 @@ export function startLocalBiometricStream(
 
     let lastSeenSerial = 0
     try {
-      // 1. Obtener el serial actual más alto
+      // 1. Obtener el serial actual más alto (lectura instantánea de tope de cola)
       const initRes = await executeIsapiRequest(
         config,
         '/ISAPI/AccessControl/AcsEvent?format=json',
@@ -136,12 +178,14 @@ export function startLocalBiometricStream(
             searchResultPosition: 0,
             maxResults: 1,
             major: 0,
-            minor: 0
+            minor: 0,
+            timeReverseOrder: true
           }
         })
       )
       const initData = JSON.parse(initRes.data)
-      lastSeenSerial = initData.AcsEvent?.totalMatches || 0
+      const firstEv = initData.AcsEvent?.InfoList?.[0]
+      lastSeenSerial = firstEv?.serialNo || initData.AcsEvent?.totalMatches || 0
       console.log(`🟢 [EdgeBiometric] Terminal en línea. Inicializado en evento serial #${lastSeenSerial}.`)
     } catch (e: any) {
       console.warn(`⚠️ [EdgeBiometric] Error al inicializar AcsEvent (${e.message}). Reintentando en 3s...`)
@@ -149,11 +193,14 @@ export function startLocalBiometricStream(
       return
     }
 
-    // 2. Loop de lectura ultra-rápida (cada 600 ms en LAN local = 0 ms WAN)
+    // 2. Loop de lectura ultra-rápida (Tope de cola en orden inverso con ventana temporal de 60s)
+    const pad = (n: number) => String(n).padStart(2, '0')
     const pollLoop = async () => {
       if (isClosed) return
       try {
-        const queryOffset = Math.max(0, lastSeenSerial - 2)
+        const now = new Date(Date.now() - 60000)
+        const startTime = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}-04:00`
+
         const res = await executeIsapiRequest(
           config,
           '/ISAPI/AccessControl/AcsEvent?format=json',
@@ -161,17 +208,20 @@ export function startLocalBiometricStream(
           JSON.stringify({
             AcsEventCond: {
               searchID: `edge_${Date.now()}`,
-              searchResultPosition: queryOffset,
-              maxResults: 10,
+              searchResultPosition: 0,
+              maxResults: 5,
               major: 0,
-              minor: 0
+              minor: 0,
+              startTime,
+              timeReverseOrder: true
             }
           })
         )
 
         if (res.statusCode === 200 && res.data.trim().startsWith('{')) {
           const parsed = JSON.parse(res.data)
-          const list = parsed.AcsEvent?.InfoList || []
+          // Ordenar cronológicamente (más antiguo al más reciente) para no saltarse eventos
+          const list = (parsed.AcsEvent?.InfoList || []).slice().reverse()
           for (const ev of list) {
             if (ev.serialNo > lastSeenSerial) {
               lastSeenSerial = Math.max(lastSeenSerial, ev.serialNo)

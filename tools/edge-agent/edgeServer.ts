@@ -17,10 +17,10 @@ import { WebSocketServer, WebSocket } from 'ws'
 import { edgeStore } from './edgeStore'
 import { startLocalBiometricStream, TerminalConfig } from './edgeBiometric'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const agentDir = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url))
 
 // Cargar configuración
-const CONFIG_PATH = path.join(__dirname, 'config.json')
+const CONFIG_PATH = path.join(agentDir, 'config.json')
 const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'))
 
 const LOCAL_DEV_URL = config.localDevUrl || 'http://localhost:3000'
@@ -188,6 +188,33 @@ const server = http.createServer((req, res) => {
     }).catch((err) => {
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ success: false, error: err.message }))
+    })
+    return
+  }
+
+  // Webhook HTTP Push nativo desde el hardware Hikvision MinMoe (0 ms)
+  if (req.url?.startsWith('/hikvision/event') && req.method === 'POST') {
+    let body = ''
+    req.on('data', chunk => { body += chunk })
+    req.on('end', () => {
+      try {
+        let rawId = ''
+        if (body.includes('{')) {
+          const s = body.indexOf('{')
+          const e = body.lastIndexOf('}')
+          if (s !== -1 && e !== -1) {
+            const parsed = JSON.parse(body.slice(s, e + 1))
+            const acs = parsed?.AccessControllerEvent || parsed?.AcsEvent
+            rawId = acs?.employeeNoString || (acs?.employeeNo ? String(acs.employeeNo) : '') || acs?.cardNo || ''
+          }
+        }
+        if (rawId) {
+          console.log(`🎯 [EdgePush] Evento empujado por MinMoe (0 ms Webhook): Cédula ${rawId}`)
+          handleLocalDetection(rawId)
+        }
+      } catch (err) {}
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ statusCode: 1, statusString: 'OK' }))
     })
     return
   }

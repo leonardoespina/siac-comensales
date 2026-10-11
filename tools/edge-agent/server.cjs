@@ -3728,12 +3728,12 @@ var import_fs = __toESM(require("fs"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_url = require("url");
 var import_meta = {};
-var __dirname = import_path.default.dirname((0, import_url.fileURLToPath)(import_meta.url));
-var QUEUE_FILE = import_path.default.join(__dirname, "edge_queue.json");
+var agentDir = typeof __dirname !== "undefined" ? __dirname : import_path.default.dirname((0, import_url.fileURLToPath)(import_meta.url));
+var QUEUE_FILE = import_path.default.join(agentDir, "edge_queue.json");
 var EdgeStore = class {
-  // Caché de comensales en memoria indexado por cédula
+  // Caché de comensales en memoria indexado por cédula (soporta múltiples turnos al día)
   dinersMap = /* @__PURE__ */ new Map();
-  // Horarios de comida
+  // Horarios de comida dinámicos recibidos de la base de datos central
   schedules = [];
   // Cola persistente de despachos pendientes de sincronizar con el servidor central
   pendingQueue = [];
@@ -3747,9 +3747,11 @@ var EdgeStore = class {
     this.dinersMap.clear();
     this.schedules = schedules || [];
     for (const d of diners) {
-      this.dinersMap.set(d.cedula.trim(), {
+      const cleanCedula = d.cedula.trim();
+      const list = this.dinersMap.get(cleanCedula) || [];
+      list.push({
         detailId: d.detailId,
-        cedula: d.cedula.trim(),
+        cedula: cleanCedula,
         name: d.name,
         shiftType: d.shiftType,
         modality: d.modality,
@@ -3757,15 +3759,58 @@ var EdgeStore = class {
         isDispatched: !!d.dispatchedAt,
         dispatchedAt: d.dispatchedAt
       });
+      this.dinersMap.set(cleanCedula, list);
     }
     for (const q of this.pendingQueue) {
-      const record = this.dinersMap.get(q.cedula);
-      if (record) {
-        record.isDispatched = true;
-        record.dispatchedAt = q.dispatchedAt;
+      const list = this.dinersMap.get(q.cedula);
+      if (list) {
+        const target = list.find((item) => item.detailId === q.detailId || item.shiftType === q.shiftType);
+        if (target) {
+          target.isDispatched = true;
+          target.dispatchedAt = q.dispatchedAt;
+        }
       }
     }
-    console.log(`\u{1F9E0} [EdgeStore] Padr\xF3n cargado en RAM: ${this.dinersMap.size} comensales aprobados.`);
+    let totalRecords = 0;
+    for (const records of this.dinersMap.values()) totalRecords += records.length;
+    console.log(`\u{1F9E0} [EdgeStore] Padr\xF3n cargado en RAM: ${this.dinersMap.size} comensales (${totalRecords} raciones autorizadas hoy).`);
+    console.log(`\u23F0 [EdgeStore] Horarios sincronizados: ${this.schedules.map((s) => `${s.shiftType} (${s.startTime}-${s.endTime})`).join(", ")}`);
+  }
+  /**
+   * Evalúa dinámicamente cuál turno está activo en este instante según los horarios de la base de datos
+   */
+  getActiveShiftAndUpcoming() {
+    const formatter = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "America/Caracas",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    });
+    const nowTime = formatter.format(/* @__PURE__ */ new Date());
+    let activeShift = null;
+    let activeSchedule = null;
+    let upcomingMessage = "";
+    for (const sched of this.schedules) {
+      const start = (sched.startTime || "").trim();
+      const end = (sched.endTime || "").trim();
+      if (!start || !end) continue;
+      let isMatching = false;
+      if (end < start) {
+        if (nowTime >= start || nowTime <= end) isMatching = true;
+      } else {
+        if (nowTime >= start && nowTime <= end) isMatching = true;
+      }
+      if (isMatching) {
+        activeShift = sched.shiftType;
+        activeSchedule = sched;
+        break;
+      } else {
+        if (nowTime < start) {
+          upcomingMessage += `[${sched.shiftType}: ${start} - ${end}] `;
+        }
+      }
+    }
+    return { activeShift, activeSchedule, upcomingMessage };
   }
   validateAndDispatchInstant(rawCedula) {
     const cedula = rawCedula.replace(/\D/g, "").trim();
@@ -3778,29 +3823,47 @@ var EdgeStore = class {
       return { success: false, code: "DEBOUNCE", message: "Detecci\xF3n duplicada reciente" };
     }
     this.debounceMap.set(cedula, now);
-    const record = this.dinersMap.get(cedula);
-    if (!record) {
+    const { activeShift, upcomingMessage } = this.getActiveShiftAndUpcoming();
+    if (!activeShift) {
+      const msg = upcomingMessage.trim() ? `Est\xE1s fuera de horario de comida. Pr\xF3ximo turno: ${upcomingMessage}` : "Est\xE1s fuera de horario de comida. No hay turnos activos en este momento.";
+      return {
+        success: false,
+        code: "OUT_OF_SCHEDULE",
+        message: msg
+      };
+    }
+    const records = this.dinersMap.get(cedula);
+    if (!records || records.length === 0) {
       return {
         success: false,
         code: "NO_REQUEST",
         message: "No posee solicitud de comida aprobada para hoy en este comedor"
       };
     }
-    if (record.isDispatched) {
+    const matchingRecord = records.find((r) => r.shiftType === activeShift);
+    if (!matchingRecord) {
+      const otherShifts = records.map((r) => r.shiftType).join(", ");
+      return {
+        success: false,
+        code: "NO_REQUEST_FOR_ACTIVE_SHIFT",
+        message: `Su comida no fue solicitada para el turno activo (${activeShift}). Sus turnos hoy: ${otherShifts}`
+      };
+    }
+    if (matchingRecord.isDispatched) {
       return {
         success: false,
         code: "ALREADY_DISPATCHED",
-        message: `${record.name} ya retir\xF3 su ${record.shiftType}`
+        message: `${matchingRecord.name} ya retir\xF3 su ${activeShift}`
       };
     }
     const nowIso = (/* @__PURE__ */ new Date()).toISOString();
-    record.isDispatched = true;
-    record.dispatchedAt = nowIso;
+    matchingRecord.isDispatched = true;
+    matchingRecord.dispatchedAt = nowIso;
     const queueItem = {
-      detailId: record.detailId,
-      cedula: record.cedula,
-      name: record.name,
-      shiftType: record.shiftType,
+      detailId: matchingRecord.detailId,
+      cedula: matchingRecord.cedula,
+      name: matchingRecord.name,
+      shiftType: matchingRecord.shiftType,
       dispatchedAt: nowIso
     };
     this.pendingQueue.push(queueItem);
@@ -3808,14 +3871,14 @@ var EdgeStore = class {
     return {
       success: true,
       code: "DISPATCH_OK",
-      message: `\xA1Buen Provecho! ${record.name}`,
+      message: `\xA1Buen Provecho! ${matchingRecord.name}`,
       diner: {
-        detailId: record.detailId,
-        cedula: record.cedula,
-        name: record.name,
-        shift: record.shiftType,
-        modality: record.modality,
-        rationType: record.rationType,
+        detailId: matchingRecord.detailId,
+        cedula: matchingRecord.cedula,
+        name: matchingRecord.name,
+        shift: matchingRecord.shiftType,
+        modality: matchingRecord.modality,
+        rationType: matchingRecord.rationType,
         dispatchedAt: nowIso
       }
     };
@@ -3838,19 +3901,17 @@ var EdgeStore = class {
     try {
       if (import_fs.default.existsSync(QUEUE_FILE)) {
         const raw = import_fs.default.readFileSync(QUEUE_FILE, "utf8");
-        this.pendingQueue = JSON.parse(raw);
-        console.log(`\u{1F4BE} [EdgeStore] Cola persistente recuperada del disco: ${this.pendingQueue.length} despachos pendientes.`);
+        this.pendingQueue = JSON.parse(raw) || [];
       }
-    } catch (e) {
-      console.error("\u26A0\uFE0F [EdgeStore] Error leyendo cola persistente:", e.message);
+    } catch {
       this.pendingQueue = [];
     }
   }
   saveQueueToDisk() {
     try {
       import_fs.default.writeFileSync(QUEUE_FILE, JSON.stringify(this.pendingQueue, null, 2), "utf8");
-    } catch (e) {
-      console.error("\u26A0\uFE0F [EdgeStore] Error guardando cola en disco:", e.message);
+    } catch (err) {
+      console.error("\u274C [EdgeStore] Error persistiendo cola en disco:", err.message);
     }
   }
 };
@@ -3889,18 +3950,32 @@ function buildDigestHeader(method, uri, challenge, user, pass) {
     return header;
   }
 }
-async function executeIsapiRequest(config2, endpoint, method = "GET", bodyData) {
+var sharedHttpsAgent = new import_https.default.Agent({
+  rejectUnauthorized: false,
+  keepAlive: true,
+  maxSockets: 20
+});
+var sharedHttpAgent = new import_http.default.Agent({
+  keepAlive: true,
+  maxSockets: 20
+});
+var challengeCache = /* @__PURE__ */ new Map();
+async function fetchChallenge(config2) {
   const baseUrl = `https://${config2.ip}:${config2.port || 443}`;
   const challengeUrl = new import_url2.URL("/ISAPI/System/deviceInfo", baseUrl);
-  const targetUrl = new import_url2.URL(endpoint, baseUrl);
-  const isHttps = targetUrl.protocol === "https:";
+  const isHttps = challengeUrl.protocol === "https:";
   const requestModule = isHttps ? import_https.default : import_http.default;
-  const agent = isHttps ? new import_https.default.Agent({ rejectUnauthorized: false, keepAlive: true }) : void 0;
-  const challenge = await new Promise((resolve, reject) => {
-    const req = requestModule.request(challengeUrl, { method: "GET", agent, timeout: 4e3 }, (res) => {
-      const authHeader2 = res.headers["www-authenticate"];
-      if (authHeader2) resolve(parseDigestHeader(authHeader2));
-      else reject(new Error(`Respuesta sin reto Digest [HTTP ${res.statusCode}]`));
+  const agent = isHttps ? sharedHttpsAgent : sharedHttpAgent;
+  return new Promise((resolve, reject) => {
+    const req = requestModule.request(challengeUrl, { method: "GET", agent, timeout: 3e3 }, (res) => {
+      const authHeader = res.headers["www-authenticate"];
+      if (authHeader) {
+        const chal = parseDigestHeader(authHeader);
+        challengeCache.set(config2.ip, chal);
+        resolve(chal);
+      } else {
+        reject(new Error(`Respuesta sin reto Digest [HTTP ${res.statusCode}]`));
+      }
     });
     req.on("error", reject);
     req.on("timeout", () => {
@@ -3909,33 +3984,52 @@ async function executeIsapiRequest(config2, endpoint, method = "GET", bodyData) 
     });
     req.end();
   });
-  const authHeader = buildDigestHeader(method, targetUrl.pathname + targetUrl.search, challenge, config2.user, config2.password);
-  const headers = {
-    "Authorization": authHeader,
-    "Accept": "*/*"
-  };
-  if (bodyData) {
-    headers["Content-Type"] = "application/json";
-    headers["Content-Length"] = Buffer.byteLength(bodyData).toString();
-  }
-  return new Promise((resolve, reject) => {
-    const req = requestModule.request(targetUrl, { method, agent, headers, timeout: 5e3 }, (res) => {
-      let data = "";
-      res.on("data", (chunk) => {
-        data += chunk;
-      });
-      res.on("end", () => resolve({ statusCode: res.statusCode || 500, data }));
-    });
-    req.on("error", reject);
-    req.on("timeout", () => {
-      req.destroy();
-      reject(new Error("Timeout petici\xF3n ISAPI"));
-    });
-    if (bodyData) req.write(bodyData);
-    req.end();
-  });
 }
-function startLocalBiometricStream(config2, onDeteccion) {
+async function executeIsapiRequest(config2, endpoint, method = "GET", bodyData) {
+  let challenge = challengeCache.get(config2.ip);
+  if (!challenge) {
+    challenge = await fetchChallenge(config2);
+  }
+  const baseUrl = `https://${config2.ip}:${config2.port || 443}`;
+  const targetUrl = new import_url2.URL(endpoint, baseUrl);
+  const isHttps = targetUrl.protocol === "https:";
+  const requestModule = isHttps ? import_https.default : import_http.default;
+  const agent = isHttps ? sharedHttpsAgent : sharedHttpAgent;
+  const sendWithChallenge = (chal) => {
+    return new Promise((resolve, reject) => {
+      const authHeader = buildDigestHeader(method, targetUrl.pathname + targetUrl.search, chal, config2.user, config2.password);
+      const headers = {
+        "Authorization": authHeader,
+        "Accept": "*/*"
+      };
+      if (bodyData) {
+        headers["Content-Type"] = "application/json";
+        headers["Content-Length"] = Buffer.byteLength(bodyData).toString();
+      }
+      const req = requestModule.request(targetUrl, { method, agent, headers, timeout: 4e3 }, (res2) => {
+        let data = "";
+        res2.on("data", (chunk) => {
+          data += chunk;
+        });
+        res2.on("end", () => resolve({ statusCode: res2.statusCode || 500, data }));
+      });
+      req.on("error", reject);
+      req.on("timeout", () => {
+        req.destroy();
+        reject(new Error("Timeout petici\xF3n ISAPI"));
+      });
+      if (bodyData) req.write(bodyData);
+      req.end();
+    });
+  };
+  let res = await sendWithChallenge(challenge);
+  if (res.statusCode === 401) {
+    challenge = await fetchChallenge(config2);
+    res = await sendWithChallenge(challenge);
+  }
+  return res;
+}
+function startLocalBiometricStream(config2, onDeteccion, pollIntervalMs = 180) {
   let isClosed = false;
   let pollTimer = null;
   const baseUrl = `https://${config2.ip}:${config2.port || 443}`;
@@ -3958,22 +4052,26 @@ function startLocalBiometricStream(config2, onDeteccion) {
             searchResultPosition: 0,
             maxResults: 1,
             major: 0,
-            minor: 0
+            minor: 0,
+            timeReverseOrder: true
           }
         })
       );
       const initData = JSON.parse(initRes.data);
-      lastSeenSerial = initData.AcsEvent?.totalMatches || 0;
+      const firstEv = initData.AcsEvent?.InfoList?.[0];
+      lastSeenSerial = firstEv?.serialNo || initData.AcsEvent?.totalMatches || 0;
       console.log(`\u{1F7E2} [EdgeBiometric] Terminal en l\xEDnea. Inicializado en evento serial #${lastSeenSerial}.`);
     } catch (e) {
       console.warn(`\u26A0\uFE0F [EdgeBiometric] Error al inicializar AcsEvent (${e.message}). Reintentando en 3s...`);
       if (!isClosed) setTimeout(startAcsPolling, 3e3);
       return;
     }
+    const pad = (n) => String(n).padStart(2, "0");
     const pollLoop = async () => {
       if (isClosed) return;
       try {
-        const queryOffset = Math.max(0, lastSeenSerial - 2);
+        const now = new Date(Date.now() - 6e4);
+        const startTime = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}-04:00`;
         const res = await executeIsapiRequest(
           config2,
           "/ISAPI/AccessControl/AcsEvent?format=json",
@@ -3981,16 +4079,18 @@ function startLocalBiometricStream(config2, onDeteccion) {
           JSON.stringify({
             AcsEventCond: {
               searchID: `edge_${Date.now()}`,
-              searchResultPosition: queryOffset,
-              maxResults: 10,
+              searchResultPosition: 0,
+              maxResults: 5,
               major: 0,
-              minor: 0
+              minor: 0,
+              startTime,
+              timeReverseOrder: true
             }
           })
         );
         if (res.statusCode === 200 && res.data.trim().startsWith("{")) {
           const parsed = JSON.parse(res.data);
-          const list = parsed.AcsEvent?.InfoList || [];
+          const list = (parsed.AcsEvent?.InfoList || []).slice().reverse();
           for (const ev of list) {
             if (ev.serialNo > lastSeenSerial) {
               lastSeenSerial = Math.max(lastSeenSerial, ev.serialNo);
@@ -4005,7 +4105,7 @@ function startLocalBiometricStream(config2, onDeteccion) {
       } catch (err) {
       }
       if (!isClosed) {
-        pollTimer = setTimeout(pollLoop, 600);
+        pollTimer = setTimeout(pollLoop, pollIntervalMs);
       }
     };
     pollLoop();
@@ -4122,8 +4222,8 @@ function startLocalBiometricStream(config2, onDeteccion) {
 
 // tools/edge-agent/edgeServer.ts
 var import_meta2 = {};
-var __dirname2 = import_path2.default.dirname((0, import_url3.fileURLToPath)(import_meta2.url));
-var CONFIG_PATH = import_path2.default.join(__dirname2, "config.json");
+var agentDir2 = typeof __dirname !== "undefined" ? __dirname : import_path2.default.dirname((0, import_url3.fileURLToPath)(import_meta2.url));
+var CONFIG_PATH = import_path2.default.join(agentDir2, "config.json");
 var config = JSON.parse(import_fs2.default.readFileSync(CONFIG_PATH, "utf8"));
 var LOCAL_DEV_URL = config.localDevUrl || "http://localhost:3000";
 var CENTRAL_URL = config.centralServerUrl || "http://10.60.0.21:8080";
@@ -4131,6 +4231,7 @@ var TUNNEL_URL = config.tunnelServerUrl || "https://comensales.lespina.info";
 var DINING_ROOM_ID = config.diningRoomId || 2;
 var PORT = config.edgePort || 3005;
 var REFRESH_INTERVAL_MIN = config.refreshIntervalMinutes || 5;
+var POLL_INTERVAL_MS = config.pollIntervalMs || 180;
 var activeTerminalConfig = null;
 var connectedWsClients = /* @__PURE__ */ new Set();
 async function fetchFromCentral(endpoint, options = {}) {
@@ -4263,6 +4364,34 @@ var server = import_http2.default.createServer((req, res) => {
     });
     return;
   }
+  if (req.url?.startsWith("/hikvision/event") && req.method === "POST") {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk;
+    });
+    req.on("end", () => {
+      try {
+        let rawId = "";
+        if (body.includes("{")) {
+          const s = body.indexOf("{");
+          const e = body.lastIndexOf("}");
+          if (s !== -1 && e !== -1) {
+            const parsed = JSON.parse(body.slice(s, e + 1));
+            const acs = parsed?.AccessControllerEvent || parsed?.AcsEvent;
+            rawId = acs?.employeeNoString || (acs?.employeeNo ? String(acs.employeeNo) : "") || acs?.cardNo || "";
+          }
+        }
+        if (rawId) {
+          console.log(`\u{1F3AF} [EdgePush] Evento empujado por MinMoe (0 ms Webhook): C\xE9dula ${rawId}`);
+          handleLocalDetection(rawId);
+        }
+      } catch (err) {
+      }
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ statusCode: 1, statusString: "OK" }));
+    });
+    return;
+  }
   res.writeHead(404);
   res.end("Not found");
 });
@@ -4287,9 +4416,13 @@ async function bootstrap() {
     console.log(`\u{1F7E2} [EdgeAgent] Servidor local HTTP y WebSocket activo en http://localhost:${PORT}`);
     await refreshDailySheet();
     if (activeTerminalConfig) {
-      startLocalBiometricStream(activeTerminalConfig, (cedula) => {
-        handleLocalDetection(cedula);
-      });
+      startLocalBiometricStream(
+        activeTerminalConfig,
+        (cedula) => {
+          handleLocalDetection(cedula);
+        },
+        POLL_INTERVAL_MS
+      );
     }
     setInterval(syncPendingQueueWorker, 3e4);
     setInterval(refreshDailySheet, REFRESH_INTERVAL_MIN * 60 * 1e3);

@@ -87,17 +87,15 @@ export async function batchUpdateDispatchedDetails(
   const results = []
 
   for (const item of items) {
-    const updated = await db.dinerRequestDetail.update({
+    const res = await db.dinerRequestDetail.updateMany({
       where: { id: item.detailId },
       data: {
         dispatchedAt: item.dispatchedAt
-      },
-      select: {
-        id: true,
-        dispatchedAt: true
       }
     })
-    results.push(updated)
+    if (res.count > 0) {
+      results.push({ id: item.detailId, dispatchedAt: item.dispatchedAt })
+    }
   }
 
   return results
