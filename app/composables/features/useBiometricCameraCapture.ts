@@ -79,7 +79,7 @@ export function useBiometricCameraCapture() {
 
       $q.notify({
         type: 'positive',
-        message: `¡Rostro capturado y enrolado con éxito para ${result.name || cedula}!`,
+        message: `¡Rostro capturado y enrolado con éxito para ${result.name || cedula}!${result.isEdge ? ' (Modo Local LAN)' : ''}`,
         icon: 'check_circle',
         position: 'top'
       })

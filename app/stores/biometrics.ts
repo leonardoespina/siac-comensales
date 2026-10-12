@@ -163,8 +163,36 @@ export const useBiometricsStore = defineStore('biometrics', () => {
 
   /**
    * Dispara el modo de captura interactivo en la pantalla táctil física del terminal MinMoe.
+   * Conmuta inteligentemente a Edge Agent local (http://localhost:3005) si está disponible en la estación,
+   * permitiendo enrolamiento sin requerir VPN activa.
    */
   async function triggerInteractiveCapture(diningRoomId: number, cedula: string): Promise<any> {
+    // 1. Probar bypass con Edge Agent local si está corriendo en esta PC para este comedor
+    try {
+      const edgeCtrl = new AbortController()
+      const tId = setTimeout(() => edgeCtrl.abort(), 600)
+      const healthRes = await fetch('http://localhost:3005/health', { signal: edgeCtrl.signal })
+      clearTimeout(tId)
+
+      if (healthRes.ok) {
+        const health = await healthRes.json()
+        if (health.mode === 'EDGE_LOCAL' && Number(health.diningRoomId) === Number(diningRoomId)) {
+          const edgeRes = await fetch('http://localhost:3005/api/edge/interactive-capture', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cedula })
+          })
+          if (edgeRes.ok) {
+            const data = await edgeRes.json()
+            return { ...data, isEdge: true }
+          }
+        }
+      }
+    } catch {
+      // Edge Agent no disponible en esta máquina o timeout; continuar por la ruta central
+    }
+
+    // 2. Ruta central tradicional (vía servidor Nuxt)
     return await $fetch('/api/biometrics/interactive-capture', {
       method: 'POST',
       body: { diningRoomId, cedula }

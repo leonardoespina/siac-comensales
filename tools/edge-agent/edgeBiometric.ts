@@ -94,12 +94,14 @@ async function fetchChallenge(config: TerminalConfig): Promise<Record<string, st
   })
 }
 
-async function executeIsapiRequest(
+export async function executeIsapiRawRequest(
   config: TerminalConfig,
   endpoint: string,
   method = 'GET',
-  bodyData?: string
-): Promise<{ statusCode: number; data: string }> {
+  bodyData?: string | Buffer,
+  contentType = 'application/json',
+  timeoutMs = 8000
+): Promise<{ statusCode: number; data: string; buffer: Buffer }> {
   let challenge = challengeCache.get(config.ip)
   if (!challenge) {
     challenge = await fetchChallenge(config)
@@ -111,7 +113,7 @@ async function executeIsapiRequest(
   const requestModule = isHttps ? https : http
   const agent = isHttps ? sharedHttpsAgent : sharedHttpAgent
 
-  const sendWithChallenge = (chal: Record<string, string>): Promise<{ statusCode: number; data: string }> => {
+  const sendWithChallenge = (chal: Record<string, string>): Promise<{ statusCode: number; data: string; buffer: Buffer }> => {
     return new Promise((resolve, reject) => {
       const authHeader = buildDigestHeader(method, targetUrl.pathname + targetUrl.search, chal, config.user, config.password)
       const headers: Record<string, string> = {
@@ -119,14 +121,21 @@ async function executeIsapiRequest(
         'Accept': '*/*'
       }
       if (bodyData) {
-        headers['Content-Type'] = 'application/json'
-        headers['Content-Length'] = Buffer.byteLength(bodyData).toString()
+        headers['Content-Type'] = contentType
+        const len = Buffer.isBuffer(bodyData) ? bodyData.length : Buffer.byteLength(bodyData)
+        headers['Content-Length'] = len.toString()
       }
 
-      const req = requestModule.request(targetUrl, { method, agent, headers, timeout: 4000 }, (res) => {
-        let data = ''
-        res.on('data', chunk => { data += chunk })
-        res.on('end', () => resolve({ statusCode: res.statusCode || 500, data }))
+      const req = requestModule.request(targetUrl, { method, agent, headers, timeout: timeoutMs }, (res) => {
+        const chunks: Buffer[] = []
+        res.on('data', chunk => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+        })
+        res.on('end', () => {
+          const buffer = Buffer.concat(chunks)
+          const data = buffer.toString('utf8')
+          resolve({ statusCode: res.statusCode || 500, data, buffer })
+        })
       })
       req.on('error', reject)
       req.on('timeout', () => { req.destroy(); reject(new Error('Timeout petición ISAPI')) })
@@ -145,6 +154,133 @@ async function executeIsapiRequest(
 
   return res
 }
+
+async function executeIsapiRequest(
+  config: TerminalConfig,
+  endpoint: string,
+  method = 'GET',
+  bodyData?: string
+): Promise<{ statusCode: number; data: string }> {
+  const raw = await executeIsapiRawRequest(config, endpoint, method, bodyData, 'application/json', 4000)
+  return { statusCode: raw.statusCode, data: raw.data }
+}
+
+export async function executeInteractiveFaceCapture(
+  config: TerminalConfig,
+  timeoutMs = 30000
+): Promise<Buffer> {
+  const payload = `<CaptureFaceDataCond version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema"><captureInfrared>false</captureInfrared><dataType>binary</dataType></CaptureFaceDataCond>`
+
+  const capRes = await executeIsapiRawRequest(
+    config,
+    '/ISAPI/AccessControl/CaptureFaceData',
+    'POST',
+    payload,
+    'application/xml',
+    timeoutMs
+  )
+
+  let photoBuffer: Buffer | null = null
+
+  if (capRes.statusCode === 200 && capRes.buffer.length > 500) {
+    if (capRes.buffer[0] === 0xFF && capRes.buffer[1] === 0xD8) {
+      photoBuffer = capRes.buffer
+    } else {
+      const startIdx = capRes.buffer.indexOf(Buffer.from([0xFF, 0xD8]))
+      const endIdx = capRes.buffer.lastIndexOf(Buffer.from([0xFF, 0xD9]))
+      if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+        photoBuffer = capRes.buffer.subarray(startIdx, endIdx + 2)
+      }
+    }
+  }
+
+  if (!photoBuffer) {
+    throw new Error(`No se completó la captura interactiva en el terminal [HTTP ${capRes.statusCode}]`)
+  }
+
+  return photoBuffer
+}
+
+export async function pushUserAndFaceLocal(
+  config: TerminalConfig,
+  cedula: string,
+  name: string,
+  photoBuffer: Buffer
+): Promise<{ userSuccess: boolean; faceSuccess: boolean; error?: string }> {
+  const cleanCedula = cedula.trim().replace(/\D/g, '')
+  if (!cleanCedula) {
+    return { userSuccess: false, faceSuccess: false, error: 'Cédula inválida' }
+  }
+
+  // 1. UserInfo SetUp
+  const setupBody = JSON.stringify({
+    UserInfo: {
+      employeeNo: cleanCedula,
+      name: (name || cleanCedula).slice(0, 32).toUpperCase().trim(),
+      userType: 'normal',
+      closeDelay: 0,
+      Valid: {
+        enable: true,
+        beginTime: '2026-01-01T00:00:00',
+        endTime: '2035-12-31T23:59:59',
+        timeType: 'local'
+      },
+      doorRight: '1',
+      RightPlan: [{ doorNo: 1, planTemplateNo: '1' }]
+    }
+  })
+
+  const userRes = await executeIsapiRawRequest(
+    config,
+    '/ISAPI/AccessControl/UserInfo/SetUp?format=json',
+    'PUT',
+    setupBody,
+    'application/json; charset=UTF-8',
+    6000
+  )
+
+  const userSuccess = userRes.statusCode === 200
+  if (!userSuccess) {
+    return { userSuccess: false, faceSuccess: false, error: `Error configurando usuario en terminal [HTTP ${userRes.statusCode}]` }
+  }
+
+  // 2. Inyectar foto facial en FDLib
+  let faceSuccess = false
+  if (photoBuffer && photoBuffer.length > 500) {
+    const boundary = '----HikvisionEdgeSyncBoundary'
+    const jsonPart = JSON.stringify({
+      faceLibType: 'blackFD',
+      FDID: '1',
+      FPID: cleanCedula
+    })
+
+    let headerStr = `--${boundary}\r\n`
+    headerStr += 'Content-Disposition: form-data; name="FaceDataRecord"\r\n'
+    headerStr += 'Content-Type: application/json\r\n\r\n'
+    headerStr += jsonPart + '\r\n'
+    headerStr += `--${boundary}\r\n`
+    headerStr += 'Content-Disposition: form-data; name="FaceImage"; filename="face.jpg"\r\n'
+    headerStr += 'Content-Type: image/jpeg\r\n\r\n'
+
+    const headBuf = Buffer.from(headerStr, 'utf8')
+    const tailBuf = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8')
+    const multipartBody = Buffer.concat([headBuf, photoBuffer, tailBuf])
+
+    const faceRes = await executeIsapiRawRequest(
+      config,
+      '/ISAPI/Intelligent/FDLib/FaceDataRecord?format=json',
+      'POST',
+      multipartBody,
+      `multipart/form-data; boundary=${boundary}`,
+      15000
+    )
+
+    faceSuccess = faceRes.statusCode === 200
+  }
+
+  return { userSuccess, faceSuccess }
+}
+
 
 export function startLocalBiometricStream(
   config: TerminalConfig,

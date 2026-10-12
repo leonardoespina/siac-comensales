@@ -15,7 +15,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { WebSocketServer, WebSocket } from 'ws'
 import { edgeStore } from './edgeStore'
-import { startLocalBiometricStream, TerminalConfig } from './edgeBiometric'
+import { startLocalBiometricStream, TerminalConfig, executeInteractiveFaceCapture, pushUserAndFaceLocal } from './edgeBiometric'
 
 const agentDir = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url))
 
@@ -215,6 +215,72 @@ const server = http.createServer((req, res) => {
       } catch (err) {}
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ statusCode: 1, statusString: 'OK' }))
+    })
+    return
+  }
+
+  // Captura interactiva directa en terminal local (Bypass de VPN para enrolamiento remoto)
+  if (req.url === '/api/edge/interactive-capture' && req.method === 'POST') {
+    let body = ''
+    req.on('data', chunk => { body += chunk })
+    req.on('end', async () => {
+      try {
+        const parsed = JSON.parse(body || '{}')
+        const cedula = String(parsed.cedula || '').trim()
+        if (!cedula) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: false, error: 'Cédula requerida' }))
+          return
+        }
+
+        if (!activeTerminalConfig) {
+          res.writeHead(503, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: false, error: 'Terminal biométrico no configurado en este Edge Agent' }))
+          return
+        }
+
+        console.log(`📸 [EdgeCapture] Activando pantalla física del terminal ${activeTerminalConfig.ip} para cédula ${cedula}...`)
+        const photoBuffer = await executeInteractiveFaceCapture(activeTerminalConfig, 30000)
+        console.log(`📸 [EdgeCapture] Foto capturada exitosamente (${(photoBuffer.length / 1024).toFixed(1)} KB)`)
+
+        // Enrolar de inmediato en el biométrico local
+        const enrollResult = await pushUserAndFaceLocal(
+          activeTerminalConfig,
+          cedula,
+          parsed.name || cedula,
+          photoBuffer
+        )
+        console.log(`👤 [EdgeCapture] Enrolado en hardware local: user=${enrollResult.userSuccess}, face=${enrollResult.faceSuccess}`)
+
+        // Subir al servidor central vía túnel / servidor disponible
+        let uploadResult: any = null
+        try {
+          uploadResult = await fetchFromCentral('/api/biometrics/face/upload', {
+            method: 'POST',
+            body: JSON.stringify({
+              cedula,
+              photoBase64: photoBuffer.toString('base64'),
+              diningRoomId: DINING_ROOM_ID
+            })
+          })
+          console.log(`☁️ [EdgeCapture] Foto respaldada en servidor central con éxito:`, uploadResult?.photoUrl)
+        } catch (uploadErr: any) {
+          console.warn(`⚠️ [EdgeCapture] Foto enrolada localmente, sincronización diferida con central: ${uploadErr.message}`)
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({
+          success: true,
+          photoUrl: uploadResult?.photoUrl || `/api/biometrics/face/${cedula}?t=${Date.now()}`,
+          cedula,
+          name: parsed.name || cedula,
+          enrolledInDevice: enrollResult.faceSuccess
+        }))
+      } catch (err: any) {
+        console.error(`❌ [EdgeCapture] Error en captura interactiva:`, err.message)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ success: false, error: err.message }))
+      }
     })
     return
   }
