@@ -3985,7 +3985,7 @@ async function fetchChallenge(config2) {
     req.end();
   });
 }
-async function executeIsapiRequest(config2, endpoint, method = "GET", bodyData) {
+async function executeIsapiRawRequest(config2, endpoint, method = "GET", bodyData, contentType = "application/json", timeoutMs = 8e3) {
   let challenge = challengeCache.get(config2.ip);
   if (!challenge) {
     challenge = await fetchChallenge(config2);
@@ -4003,15 +4003,20 @@ async function executeIsapiRequest(config2, endpoint, method = "GET", bodyData) 
         "Accept": "*/*"
       };
       if (bodyData) {
-        headers["Content-Type"] = "application/json";
-        headers["Content-Length"] = Buffer.byteLength(bodyData).toString();
+        headers["Content-Type"] = contentType;
+        const len = Buffer.isBuffer(bodyData) ? bodyData.length : Buffer.byteLength(bodyData);
+        headers["Content-Length"] = len.toString();
       }
-      const req = requestModule.request(targetUrl, { method, agent, headers, timeout: 4e3 }, (res2) => {
-        let data = "";
+      const req = requestModule.request(targetUrl, { method, agent, headers, timeout: timeoutMs }, (res2) => {
+        const chunks = [];
         res2.on("data", (chunk) => {
-          data += chunk;
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
         });
-        res2.on("end", () => resolve({ statusCode: res2.statusCode || 500, data }));
+        res2.on("end", () => {
+          const buffer = Buffer.concat(chunks);
+          const data = buffer.toString("utf8");
+          resolve({ statusCode: res2.statusCode || 500, data, buffer });
+        });
       });
       req.on("error", reject);
       req.on("timeout", () => {
@@ -4028,6 +4033,104 @@ async function executeIsapiRequest(config2, endpoint, method = "GET", bodyData) 
     res = await sendWithChallenge(challenge);
   }
   return res;
+}
+async function executeIsapiRequest(config2, endpoint, method = "GET", bodyData) {
+  const raw = await executeIsapiRawRequest(config2, endpoint, method, bodyData, "application/json", 4e3);
+  return { statusCode: raw.statusCode, data: raw.data };
+}
+async function executeInteractiveFaceCapture(config2, timeoutMs = 3e4) {
+  const payload = `<CaptureFaceDataCond version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema"><captureInfrared>false</captureInfrared><dataType>binary</dataType></CaptureFaceDataCond>`;
+  const capRes = await executeIsapiRawRequest(
+    config2,
+    "/ISAPI/AccessControl/CaptureFaceData",
+    "POST",
+    payload,
+    "application/xml",
+    timeoutMs
+  );
+  let photoBuffer = null;
+  if (capRes.statusCode === 200 && capRes.buffer.length > 500) {
+    if (capRes.buffer[0] === 255 && capRes.buffer[1] === 216) {
+      photoBuffer = capRes.buffer;
+    } else {
+      const startIdx = capRes.buffer.indexOf(Buffer.from([255, 216]));
+      const endIdx = capRes.buffer.lastIndexOf(Buffer.from([255, 217]));
+      if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+        photoBuffer = capRes.buffer.subarray(startIdx, endIdx + 2);
+      }
+    }
+  }
+  if (!photoBuffer) {
+    throw new Error(`No se complet\xF3 la captura interactiva en el terminal [HTTP ${capRes.statusCode}]`);
+  }
+  return photoBuffer;
+}
+async function pushUserAndFaceLocal(config2, cedula, name, photoBuffer) {
+  const cleanCedula = cedula.trim().replace(/\D/g, "");
+  if (!cleanCedula) {
+    return { userSuccess: false, faceSuccess: false, error: "C\xE9dula inv\xE1lida" };
+  }
+  const setupBody = JSON.stringify({
+    UserInfo: {
+      employeeNo: cleanCedula,
+      name: (name || cleanCedula).slice(0, 32).toUpperCase().trim(),
+      userType: "normal",
+      closeDelay: 0,
+      Valid: {
+        enable: true,
+        beginTime: "2026-01-01T00:00:00",
+        endTime: "2035-12-31T23:59:59",
+        timeType: "local"
+      },
+      doorRight: "1",
+      RightPlan: [{ doorNo: 1, planTemplateNo: "1" }]
+    }
+  });
+  const userRes = await executeIsapiRawRequest(
+    config2,
+    "/ISAPI/AccessControl/UserInfo/SetUp?format=json",
+    "PUT",
+    setupBody,
+    "application/json; charset=UTF-8",
+    6e3
+  );
+  const userSuccess = userRes.statusCode === 200;
+  if (!userSuccess) {
+    return { userSuccess: false, faceSuccess: false, error: `Error configurando usuario en terminal [HTTP ${userRes.statusCode}]` };
+  }
+  let faceSuccess = false;
+  if (photoBuffer && photoBuffer.length > 500) {
+    const boundary = "----HikvisionEdgeSyncBoundary";
+    const jsonPart = JSON.stringify({
+      faceLibType: "blackFD",
+      FDID: "1",
+      FPID: cleanCedula
+    });
+    let headerStr = `--${boundary}\r
+`;
+    headerStr += 'Content-Disposition: form-data; name="FaceDataRecord"\r\n';
+    headerStr += "Content-Type: application/json\r\n\r\n";
+    headerStr += jsonPart + "\r\n";
+    headerStr += `--${boundary}\r
+`;
+    headerStr += 'Content-Disposition: form-data; name="FaceImage"; filename="face.jpg"\r\n';
+    headerStr += "Content-Type: image/jpeg\r\n\r\n";
+    const headBuf = Buffer.from(headerStr, "utf8");
+    const tailBuf = Buffer.from(`\r
+--${boundary}--\r
+`, "utf8");
+    const multipartBody = Buffer.concat([headBuf, photoBuffer, tailBuf]);
+    const faceRes = await executeIsapiRawRequest(
+      config2,
+      "/ISAPI/Intelligent/FDLib/FaceDataRecord?format=json",
+      "POST",
+      multipartBody,
+      `multipart/form-data; boundary=${boundary}`,
+      15e3
+    );
+    faceSuccess = faceRes.statusCode === 200;
+  }
+  return { userSuccess, faceSuccess };
 }
 function startLocalBiometricStream(config2, onDeteccion, pollIntervalMs = 180) {
   let isClosed = false;
@@ -4389,6 +4492,65 @@ var server = import_http2.default.createServer((req, res) => {
       }
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ statusCode: 1, statusString: "OK" }));
+    });
+    return;
+  }
+  if (req.url === "/api/edge/interactive-capture" && req.method === "POST") {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk;
+    });
+    req.on("end", async () => {
+      try {
+        const parsed = JSON.parse(body || "{}");
+        const cedula = String(parsed.cedula || "").trim();
+        if (!cedula) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: false, error: "C\xE9dula requerida" }));
+          return;
+        }
+        if (!activeTerminalConfig) {
+          res.writeHead(503, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: false, error: "Terminal biom\xE9trico no configurado en este Edge Agent" }));
+          return;
+        }
+        console.log(`\u{1F4F8} [EdgeCapture] Activando pantalla f\xEDsica del terminal ${activeTerminalConfig.ip} para c\xE9dula ${cedula}...`);
+        const photoBuffer = await executeInteractiveFaceCapture(activeTerminalConfig, 3e4);
+        console.log(`\u{1F4F8} [EdgeCapture] Foto capturada exitosamente (${(photoBuffer.length / 1024).toFixed(1)} KB)`);
+        const enrollResult = await pushUserAndFaceLocal(
+          activeTerminalConfig,
+          cedula,
+          parsed.name || cedula,
+          photoBuffer
+        );
+        console.log(`\u{1F464} [EdgeCapture] Enrolado en hardware local: user=${enrollResult.userSuccess}, face=${enrollResult.faceSuccess}`);
+        let uploadResult = null;
+        try {
+          uploadResult = await fetchFromCentral("/api/biometrics/face/upload", {
+            method: "POST",
+            body: JSON.stringify({
+              cedula,
+              photoBase64: photoBuffer.toString("base64"),
+              diningRoomId: DINING_ROOM_ID
+            })
+          });
+          console.log(`\u2601\uFE0F [EdgeCapture] Foto respaldada en servidor central con \xE9xito:`, uploadResult?.photoUrl);
+        } catch (uploadErr) {
+          console.warn(`\u26A0\uFE0F [EdgeCapture] Foto enrolada localmente, sincronizaci\xF3n diferida con central: ${uploadErr.message}`);
+        }
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          success: true,
+          photoUrl: uploadResult?.photoUrl || `/api/biometrics/face/${cedula}?t=${Date.now()}`,
+          cedula,
+          name: parsed.name || cedula,
+          enrolledInDevice: enrollResult.faceSuccess
+        }));
+      } catch (err) {
+        console.error(`\u274C [EdgeCapture] Error en captura interactiva:`, err.message);
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
     });
     return;
   }
