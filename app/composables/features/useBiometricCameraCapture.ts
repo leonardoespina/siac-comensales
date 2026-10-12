@@ -52,7 +52,7 @@ export function useBiometricCameraCapture() {
   /**
    * Captura directa e instantánea desde la pantalla táctil física del terminal MinMoe
    */
-  async function captureDirectFromDevice(cedula: string): Promise<{ success: boolean; photoUrl?: string }> {
+  async function captureDirectFromDevice(cedula: string, dinerName?: string): Promise<{ success: boolean; photoUrl?: string }> {
     if (!selectedDiningRoomId.value) {
       $q.notify({ type: 'warning', message: 'Debe seleccionar un terminal activo', position: 'top' })
       return { success: false }
@@ -74,7 +74,7 @@ export function useBiometricCameraCapture() {
     })
 
     try {
-      const result = await biometricsStore.triggerInteractiveCapture(selectedDiningRoomId.value, cedula)
+      const result = await biometricsStore.triggerInteractiveCapture(selectedDiningRoomId.value, cedula, dinerName)
       notif()
 
       $q.notify({

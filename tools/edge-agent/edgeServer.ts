@@ -243,14 +243,17 @@ const server = http.createServer((req, res) => {
         const photoBuffer = await executeInteractiveFaceCapture(activeTerminalConfig, 30000)
         console.log(`📸 [EdgeCapture] Foto capturada exitosamente (${(photoBuffer.length / 1024).toFixed(1)} KB)`)
 
+        // Resolver nombre real: body, padrón local en memoria o terminal
+        const targetName = parsed.name || edgeStore.getDinerName(cedula) || ''
+
         // Enrolar de inmediato en el biométrico local
         const enrollResult = await pushUserAndFaceLocal(
           activeTerminalConfig,
           cedula,
-          parsed.name || cedula,
+          targetName,
           photoBuffer
         )
-        console.log(`👤 [EdgeCapture] Enrolado en hardware local: user=${enrollResult.userSuccess}, face=${enrollResult.faceSuccess}`)
+        console.log(`👤 [EdgeCapture] Enrolado en hardware local (${targetName || 'Nombre preservado'}): user=${enrollResult.userSuccess}, face=${enrollResult.faceSuccess}`)
 
         // Subir al servidor central vía túnel / servidor disponible
         let uploadResult: any = null

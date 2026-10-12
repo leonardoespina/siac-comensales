@@ -201,6 +201,35 @@ export async function executeInteractiveFaceCapture(
   return photoBuffer
 }
 
+export async function getTerminalUserName(config: TerminalConfig, cleanCedula: string): Promise<string | null> {
+  try {
+    const searchBody = JSON.stringify({
+      UserInfoSearchCond: {
+        searchID: `name_search_${Date.now()}`,
+        searchResultPosition: 0,
+        maxResults: 1,
+        EmployeeNoList: [{ employeeNo: cleanCedula }]
+      }
+    })
+    const res = await executeIsapiRawRequest(
+      config,
+      '/ISAPI/AccessControl/UserInfo/Search?format=json',
+      'POST',
+      searchBody,
+      'application/json; charset=UTF-8',
+      4000
+    )
+    if (res.statusCode === 200 && res.data) {
+      const parsed = JSON.parse(res.data)
+      const u = parsed.UserInfoSearch?.UserInfo?.[0]
+      if (u?.name && u.name.trim() && u.name.trim() !== cleanCedula) {
+        return u.name.trim()
+      }
+    }
+  } catch {}
+  return null
+}
+
 export async function pushUserAndFaceLocal(
   config: TerminalConfig,
   cedula: string,
@@ -212,11 +241,23 @@ export async function pushUserAndFaceLocal(
     return { userSuccess: false, faceSuccess: false, error: 'Cédula inválida' }
   }
 
+  // Resolver nombre: si viene vacío o igual a la cédula, preservar el que ya tenga el biométrico
+  let resolvedName = name ? name.trim() : ''
+  if (!resolvedName || resolvedName === cleanCedula) {
+    const existingName = await getTerminalUserName(config, cleanCedula)
+    if (existingName) {
+      resolvedName = existingName
+    }
+  }
+  if (!resolvedName) {
+    resolvedName = cleanCedula
+  }
+
   // 1. UserInfo SetUp
   const setupBody = JSON.stringify({
     UserInfo: {
       employeeNo: cleanCedula,
-      name: (name || cleanCedula).slice(0, 32).toUpperCase().trim(),
+      name: resolvedName.slice(0, 32).toUpperCase().trim(),
       userType: 'normal',
       closeDelay: 0,
       Valid: {

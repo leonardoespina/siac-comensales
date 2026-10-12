@@ -85,6 +85,14 @@ class EdgeStore {
     console.log(`⏰ [EdgeStore] Horarios sincronizados: ${this.schedules.map(s => `${s.shiftType} (${s.startTime}-${s.endTime})`).join(', ')}`)
   }
 
+  public getDinerName(cedula: string): string | null {
+    const raw = cedula.trim()
+    const cleanCedula = raw.replace(/\D/g, '')
+    const list = this.dinersMap.get(cleanCedula) || this.dinersMap.get(raw)
+    return list?.[0]?.name || null
+  }
+
+
   /**
    * Evalúa dinámicamente cuál turno está activo en este instante según los horarios de la base de datos
    */

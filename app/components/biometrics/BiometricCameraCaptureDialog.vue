@@ -196,7 +196,7 @@ function onDialogUpdate(val: boolean) {
 }
 
 async function onDirectDeviceCapture() {
-  const result = await captureDirectFromDevice(props.cedula)
+  const result = await captureDirectFromDevice(props.cedula, displayName.value)
   if (result.success && result.photoUrl) {
     emit('enrolled', { photoUrl: result.photoUrl })
     emit('update:modelValue', false)

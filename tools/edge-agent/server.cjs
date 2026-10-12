@@ -3776,6 +3776,12 @@ var EdgeStore = class {
     console.log(`\u{1F9E0} [EdgeStore] Padr\xF3n cargado en RAM: ${this.dinersMap.size} comensales (${totalRecords} raciones autorizadas hoy).`);
     console.log(`\u23F0 [EdgeStore] Horarios sincronizados: ${this.schedules.map((s) => `${s.shiftType} (${s.startTime}-${s.endTime})`).join(", ")}`);
   }
+  getDinerName(cedula) {
+    const raw = cedula.trim();
+    const cleanCedula = raw.replace(/\D/g, "");
+    const list = this.dinersMap.get(cleanCedula) || this.dinersMap.get(raw);
+    return list?.[0]?.name || null;
+  }
   /**
    * Evalúa dinámicamente cuál turno está activo en este instante según los horarios de la base de datos
    */
@@ -4065,15 +4071,54 @@ async function executeInteractiveFaceCapture(config2, timeoutMs = 3e4) {
   }
   return photoBuffer;
 }
+async function getTerminalUserName(config2, cleanCedula) {
+  try {
+    const searchBody = JSON.stringify({
+      UserInfoSearchCond: {
+        searchID: `name_search_${Date.now()}`,
+        searchResultPosition: 0,
+        maxResults: 1,
+        EmployeeNoList: [{ employeeNo: cleanCedula }]
+      }
+    });
+    const res = await executeIsapiRawRequest(
+      config2,
+      "/ISAPI/AccessControl/UserInfo/Search?format=json",
+      "POST",
+      searchBody,
+      "application/json; charset=UTF-8",
+      4e3
+    );
+    if (res.statusCode === 200 && res.data) {
+      const parsed = JSON.parse(res.data);
+      const u = parsed.UserInfoSearch?.UserInfo?.[0];
+      if (u?.name && u.name.trim() && u.name.trim() !== cleanCedula) {
+        return u.name.trim();
+      }
+    }
+  } catch {
+  }
+  return null;
+}
 async function pushUserAndFaceLocal(config2, cedula, name, photoBuffer) {
   const cleanCedula = cedula.trim().replace(/\D/g, "");
   if (!cleanCedula) {
     return { userSuccess: false, faceSuccess: false, error: "C\xE9dula inv\xE1lida" };
   }
+  let resolvedName = name ? name.trim() : "";
+  if (!resolvedName || resolvedName === cleanCedula) {
+    const existingName = await getTerminalUserName(config2, cleanCedula);
+    if (existingName) {
+      resolvedName = existingName;
+    }
+  }
+  if (!resolvedName) {
+    resolvedName = cleanCedula;
+  }
   const setupBody = JSON.stringify({
     UserInfo: {
       employeeNo: cleanCedula,
-      name: (name || cleanCedula).slice(0, 32).toUpperCase().trim(),
+      name: resolvedName.slice(0, 32).toUpperCase().trim(),
       userType: "normal",
       closeDelay: 0,
       Valid: {
@@ -4517,13 +4562,14 @@ var server = import_http2.default.createServer((req, res) => {
         console.log(`\u{1F4F8} [EdgeCapture] Activando pantalla f\xEDsica del terminal ${activeTerminalConfig.ip} para c\xE9dula ${cedula}...`);
         const photoBuffer = await executeInteractiveFaceCapture(activeTerminalConfig, 3e4);
         console.log(`\u{1F4F8} [EdgeCapture] Foto capturada exitosamente (${(photoBuffer.length / 1024).toFixed(1)} KB)`);
+        const targetName = parsed.name || edgeStore.getDinerName(cedula) || "";
         const enrollResult = await pushUserAndFaceLocal(
           activeTerminalConfig,
           cedula,
-          parsed.name || cedula,
+          targetName,
           photoBuffer
         );
-        console.log(`\u{1F464} [EdgeCapture] Enrolado en hardware local: user=${enrollResult.userSuccess}, face=${enrollResult.faceSuccess}`);
+        console.log(`\u{1F464} [EdgeCapture] Enrolado en hardware local (${targetName || "Nombre preservado"}): user=${enrollResult.userSuccess}, face=${enrollResult.faceSuccess}`);
         let uploadResult = null;
         try {
           uploadResult = await fetchFromCentral("/api/biometrics/face/upload", {
