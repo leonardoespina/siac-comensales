@@ -19,7 +19,6 @@ import { HikvisionDeviceConfig } from '../../domain/biometrics'
 import { openAlertStreamConnection } from './streamConnection'
 import { handleDetectedAccessEvent } from './stream'
 import { checkTerminalHealth } from './health'
-import { syncDeviceToday } from './offlineSync'
 import { emitEvent } from '../../utils/eventBus'
 import { listActiveBiometricDiningRooms } from '../../repository/biometricRepository'
 
@@ -128,9 +127,7 @@ export function startStream(device: HikvisionDeviceConfig) {
       }
 
       if (wasReconnected) {
-        syncDeviceToday(device).catch((err: any) => {
-          console.error(`⚠️ [StreamSupervisor] Error reconciliando tras reconexión (${device.diningRoomName}):`, err?.message || err)
-        })
+        console.log(`🔄 [StreamSupervisor] Stream reconectado exitosamente en ${device.diningRoomName} (${device.ip}). Escuchando eventos en tiempo real.`)
       }
 
       for (const data of objects) {
