@@ -20,6 +20,12 @@ import {
 
 // Cache de retos Digest por IP de dispositivo
 const challengeCache = new Map<string, HikvisionDigestChallenge>()
+const sharedHttpsAgent = new https.Agent({
+  rejectUnauthorized: false,
+  keepAlive: true,
+  maxSockets: 10,
+  keepAliveMsecs: 5000
+})
 
 export function parseDigestHeader(header: string): HikvisionDigestChallenge {
   const challenge: Record<string, string> = {}
@@ -65,10 +71,11 @@ export async function fetchDeviceChallenge(device: HikvisionDeviceConfig): Promi
   const fullUrl = new URL('/ISAPI/System/deviceInfo', baseUrl)
   const isHttps = fullUrl.protocol === 'https:'
   const requestModule = isHttps ? https : http
-  const agent = isHttps ? new https.Agent({ rejectUnauthorized: false }) : undefined
+  const agent = isHttps ? sharedHttpsAgent : undefined
 
   return new Promise((resolve, reject) => {
     const req = requestModule.request(fullUrl, { method: 'GET', agent, timeout: 5000 }, (res) => {
+      res.resume()
       const wwwAuth = res.headers['www-authenticate']
       if (res.statusCode === 401 && wwwAuth) {
         const challenge = parseDigestHeader(wwwAuth)
@@ -111,7 +118,7 @@ export async function executeIsapiRequest(
   const fullUrl = new URL(endpoint, baseUrl)
   const isHttps = fullUrl.protocol === 'https:'
   const requestModule = isHttps ? https : http
-  const agent = isHttps ? new https.Agent({ rejectUnauthorized: false }) : undefined
+  const agent = isHttps ? sharedHttpsAgent : undefined
 
   const sendWithChallenge = (chal: HikvisionDigestChallenge): Promise<{ statusCode: number; data: string; buffer: Buffer }> => {
     return new Promise((resolve, reject) => {

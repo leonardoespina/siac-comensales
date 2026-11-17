@@ -19,6 +19,7 @@ export function openAcsPollingConnection(
   let isClosed = false
   let pollTimer: NodeJS.Timeout | null = null
   let lastSeenSerial = 0
+  let consecutiveErrors = 0
 
   const safeClose = (reason: string) => {
     if (isClosed) return
@@ -98,6 +99,7 @@ export function openAcsPollingConnection(
         if (isClosed) return
 
         if (res.statusCode === 200 && res.data.trim().startsWith('{')) {
+          consecutiveErrors = 0
           const parsed = JSON.parse(res.data)
           // Orden cronológico (antiguo a nuevo) para procesar ordenadamente
           const infoList: any[] = (parsed?.AcsEvent?.InfoList || []).slice().reverse()
@@ -136,13 +138,18 @@ export function openAcsPollingConnection(
           }
         }
       } catch (err: any) {
-        // En caso de fallo transitorio, registrar advertencia sin colapsar de inmediato
         if (!isClosed) {
-          console.warn(`⚠️ [AcsPolling] Reintento de consulta (${device.diningRoomName}): ${err.message}`)
+          consecutiveErrors++
+          if (consecutiveErrors >= 5) {
+            safeClose(`Conexión perdida tras ${consecutiveErrors} intentos: ${err.message}`)
+            return
+          }
+          console.warn(`⚠️ [AcsPolling] Reintento ${consecutiveErrors}/5 (${device.diningRoomName}): ${err.message}`)
         }
       } finally {
         if (!isClosed) {
-          pollTimer = setTimeout(pollLoop, pollIntervalMs)
+          const nextDelay = consecutiveErrors > 0 ? 2000 : pollIntervalMs
+          pollTimer = setTimeout(pollLoop, nextDelay)
         }
       }
     }

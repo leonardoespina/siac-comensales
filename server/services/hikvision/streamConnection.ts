@@ -54,10 +54,12 @@ export function openAlertStreamConnection(
     }
     if (activeRes) {
       activeRes.removeAllListeners()
+      activeRes.on('error', () => {})
       activeRes.destroy()
     }
     if (activeReq) {
       activeReq.removeAllListeners()
+      activeReq.on('error', () => {})
       activeReq.destroy()
     }
     callbacks.onClose(reason)
@@ -65,7 +67,7 @@ export function openAlertStreamConnection(
 
   const startStream = async () => {
     try {
-      const challenge = await fetchDeviceChallenge(device).catch(() => null)
+      const challenge = await fetchDeviceChallenge(device)
       if (isClosed) return
 
       const baseUrl = buildDeviceBaseUrl(device.ip, device.port)
