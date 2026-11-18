@@ -36,8 +36,7 @@ export default defineNitroPlugin(async (nitroApp) => {
     const socketServer = io || (globalThis as any).__sioInstance
     if (socketServer) {
       console.log(`📡 [Hikvision Plugin] Emitiendo detección facial a Socket.io (Comedor ${event.diningRoomId}, Cédula: ${event.cedula})`)
-      // Emitir al canal específico del comedor y al canal global
-      socketServer.to(`dining_room_${event.diningRoomId}`).emit('biometric:identified', event)
+      // Emitir una única vez para evitar que el mismo cliente reciba dos eventos seguidos
       socketServer.emit('biometric:identified', event)
       socketServer.emit('biometric:scan', event)
     } else {
