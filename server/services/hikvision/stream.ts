@@ -22,9 +22,9 @@ import { fetchAndStoreFaceFromDevice } from './face'
 import * as biometricRepo from '../../repository/biometricRepository'
 import { emitEvent } from '../../utils/eventBus'
 
-// Anti-rebote en memoria (4 segundos por comensal)
+// Anti-rebote en memoria (20 segundos por comensal para evitar doble lectura mientras espera su bandeja)
 const recentDetections = new Map<string, number>()
-const DEBOUNCE_MS = 4000
+const DEBOUNCE_MS = 20000
 
 export function extractJsonObjectsFromBuffer(buffer: string): { objects: any[]; remaining: string } {
   const objects: any[] = []
