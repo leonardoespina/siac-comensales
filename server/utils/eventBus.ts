@@ -57,5 +57,10 @@ export const eventBus = globalObj.__appEventBus || (globalObj.__appEventBus = mi
 export function emitEvent<K extends keyof AppEvents>(event: K, payload: AppEvents[K]) {
   // Emitimos internamente para que los listeners (ej. WebSockets, Logs) reaccionen
   eventBus.emit(event, payload)
+  if (event === 'biometric:offline_synced' && payload && typeof payload === 'object' && 'results' in payload) {
+    const { results, ...compactSummary } = payload as any
+    console.log(`[EventBus] Emitted: ${event}`, { ...compactSummary, resultsCount: results?.length || 0 })
+    return
+  }
   console.log(`[EventBus] Emitted: ${event}`, payload)
 }

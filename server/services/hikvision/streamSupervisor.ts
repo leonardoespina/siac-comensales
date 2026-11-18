@@ -37,6 +37,8 @@ interface StreamState {
 
 const globalObj = globalThis as any
 const streamRegistry: Map<number, StreamState> = globalObj.__hikvisionStreamRegistry || (globalObj.__hikvisionStreamRegistry = new Map())
+const lastOfflineSyncMap = new Map<number, number>()
+const OFFLINE_SYNC_COOLDOWN_MS = 30 * 60 * 1000 // 30 minutos de enfriamiento ante parpadeos de red
 let watchdogTimer: NodeJS.Timeout | null = globalObj.__hikvisionWatchdogTimer || null
 
 function notifyStatusChange(state: StreamState) {
@@ -129,9 +131,13 @@ export function startStream(device: HikvisionDeviceConfig) {
 
       if (wasReconnected) {
         console.log(`🔄 [StreamSupervisor] Stream reconectado exitosamente en ${device.diningRoomName} (${device.ip}). Escuchando eventos en tiempo real.`)
-        syncDeviceToday(device).catch((err) => {
-          console.warn(`⚠️ [OfflineSync] Error conciliando eventos tras reconexión en ${device.diningRoomName}:`, err?.message || err)
-        })
+        const lastSyncAt = lastOfflineSyncMap.get(device.diningRoomId) || 0
+        if (Date.now() - lastSyncAt > OFFLINE_SYNC_COOLDOWN_MS) {
+          lastOfflineSyncMap.set(device.diningRoomId, Date.now())
+          syncDeviceToday(device).catch((err) => {
+            console.warn(`⚠️ [OfflineSync] Error conciliando eventos tras reconexión en ${device.diningRoomName}:`, err?.message || err)
+          })
+        }
       }
 
       for (const data of objects) {
