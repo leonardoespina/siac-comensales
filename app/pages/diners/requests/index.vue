@@ -16,13 +16,13 @@
     <!-- Filtros de Búsqueda Histórico -->
     <q-card bordered class="my-card shadow-1 q-mb-md">
       <q-card-section class="row q-col-gutter-md items-center">
-        <div class="col-12 col-sm-6 col-md-3">
+        <div class="col-12 col-sm-6 col-md-2">
           <q-input v-model="history.filterStartDate.value" label="Desde" type="date" outlined dense bg-color="white" />
         </div>
-        <div class="col-12 col-sm-6 col-md-3">
+        <div class="col-12 col-sm-6 col-md-2">
           <q-input v-model="history.filterEndDate.value" label="Hasta" type="date" outlined dense bg-color="white" />
         </div>
-        <div class="col-12 col-sm-6 col-md-3">
+        <div class="col-12 col-sm-6 col-md-2">
           <q-select
             v-model="history.selectedSiteId.value"
             :options="history.sitesOptions.value"
@@ -35,7 +35,33 @@
             :disable="history.sitesOptions.value.length === 1"
           />
         </div>
-        <div class="col-12 col-sm-6 col-md-3 row justify-end">
+        <div class="col-12 col-sm-6 col-md-2">
+          <q-select
+            v-model="history.selectedDependencyId.value"
+            :options="history.dependenciesOptions.value"
+            emit-value
+            map-options
+            outlined
+            dense
+            bg-color="white"
+            label="Gerencia"
+            :disable="history.dependenciesOptions.value.length <= 1"
+          />
+        </div>
+        <div class="col-12 col-sm-6 col-md-2">
+          <q-select
+            v-model="history.selectedSubdependencyId.value"
+            :options="history.subdependenciesOptions.value"
+            emit-value
+            map-options
+            outlined
+            dense
+            bg-color="white"
+            label="Subdependencia"
+            :disable="history.subdependenciesOptions.value.length <= 1"
+          />
+        </div>
+        <div class="col-12 col-sm-6 col-md-2 row justify-end">
           <q-btn color="secondary" icon="search" label="Buscar" class="full-width" @click="history.loadData" :loading="store.loading" />
         </div>
       </q-card-section>
@@ -51,6 +77,13 @@
       bordered
       class="shadow-1"
     >
+      <template v-slot:body-cell-subdependency="props">
+        <q-td :props="props">
+          <div class="text-weight-medium text-grey-9">{{ props.row.subdependencyName }}</div>
+          <div v-if="props.row.dependencyName" class="text-caption text-grey-7">{{ props.row.dependencyName }}</div>
+        </q-td>
+      </template>
+
       <template v-slot:body-cell-status="props">
         <q-td :props="props">
           <q-chip :color="props.row.status === 'DELETED' ? 'grey' : (props.row.status === 'APPROVED' ? 'positive' : 'warning')" text-color="white" size="sm">

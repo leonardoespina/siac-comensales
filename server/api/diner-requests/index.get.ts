@@ -12,14 +12,34 @@ export default defineApiHandler(async (event) => {
   const startDate = query.startDate as string
   const endDate = query.endDate as string
   const siteId = query.siteId ? Number(query.siteId) : undefined
+  const queryDependencyId = query.dependencyId ? Number(query.dependencyId) : undefined
+  const querySubdependencyId = query.subdependencyId ? Number(query.subdependencyId) : undefined
   
   if (!startDate || !endDate) {
     throw new Error('Debe proveer startDate y endDate')
   }
 
   const userSubIds: number[] = user.subdependencyIds || (user.subdependencyId ? [user.subdependencyId] : [])
-  const filterByDependencyId = user.dependencyId ? user.dependencyId : null
-  const filterBySubdependencyIds = userSubIds.length > 0 ? userSubIds : null
+
+  // Resolver Gerencia (Dependency) efectiva respetando aislamiento de usuario casado
+  let filterByDependencyId: number | null = null
+  if (user.dependencyId) {
+    filterByDependencyId = user.dependencyId
+  } else if (queryDependencyId) {
+    filterByDependencyId = queryDependencyId
+  }
+
+  // Resolver Subdependencia efectiva respetando aislamiento de usuario casado
+  let filterBySubdependencyIds: number[] | null = null
+  if (userSubIds.length > 0) {
+    if (querySubdependencyId && userSubIds.includes(querySubdependencyId)) {
+      filterBySubdependencyIds = [querySubdependencyId]
+    } else {
+      filterBySubdependencyIds = userSubIds
+    }
+  } else if (querySubdependencyId) {
+    filterBySubdependencyIds = [querySubdependencyId]
+  }
 
   // Restricción por Sedes Autorizadas:
   // Si el usuario no es global y tiene sedes asignadas, filtramos por sus sedes

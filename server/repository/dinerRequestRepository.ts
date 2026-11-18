@@ -28,23 +28,33 @@ export const dinerRequestRepository = {
           }
         } : {}),
         ...(subIds.length > 0 ? {
-          details: {
-            some: {
-              diner: {
-                subdependencyId: { in: subIds }
-              }
-            }
-          }
-        } : filterDependencyId ? {
-          details: {
-            some: {
-              diner: {
-                subdependency: {
-                  dependencyId: filterDependencyId
+          OR: [
+            { targetSubdependencyId: { in: subIds } },
+            {
+              details: {
+                some: {
+                  diner: {
+                    subdependencyId: { in: subIds }
+                  }
                 }
               }
             }
-          }
+          ]
+        } : filterDependencyId ? {
+          OR: [
+            { targetSubdependency: { dependencyId: filterDependencyId } },
+            {
+              details: {
+                some: {
+                  diner: {
+                    subdependency: {
+                      dependencyId: filterDependencyId
+                    }
+                  }
+                }
+              }
+            }
+          ]
         } : {})
       },
       include: {
@@ -57,10 +67,33 @@ export const dinerRequestRepository = {
             site: { select: { id: true, name: true } } 
           } 
         },
-        targetSubdependency: { select: { id: true, dependencyId: true } },
+        targetSubdependency: {
+          select: {
+            id: true,
+            name: true,
+            dependencyId: true,
+            dependency: { select: { id: true, name: true } }
+          }
+        },
         details: {
           include: {
-            diner: { select: { cedula: true, name: true, rationType: true, subdependencyId: true, squadId: true, subdependency: { select: { dependencyId: true } } } }
+            diner: {
+              select: {
+                cedula: true,
+                name: true,
+                rationType: true,
+                subdependencyId: true,
+                squadId: true,
+                subdependency: {
+                  select: {
+                    id: true,
+                    name: true,
+                    dependencyId: true,
+                    dependency: { select: { id: true, name: true } }
+                  }
+                }
+              }
+            }
           }
         }
       },
