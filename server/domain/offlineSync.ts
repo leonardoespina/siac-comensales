@@ -90,9 +90,10 @@ export function filterAndDeduplicateOfflineEvents(
     if (!cedula) continue
 
     const detectedAt = new Date(ev.time)
+    const hourKey = !isNaN(detectedAt.getTime()) ? `${cedula}_${detectedAt.getUTCHours()}` : cedula
 
-    if (!candidateMap.has(cedula)) {
-      candidateMap.set(cedula, {
+    if (!candidateMap.has(hourKey)) {
+      candidateMap.set(hourKey, {
         cedula,
         name: ev.name?.trim() || '',
         detectedAt,
@@ -100,7 +101,7 @@ export function filterAndDeduplicateOfflineEvents(
         passCount: 1
       })
     } else {
-      const existing = candidateMap.get(cedula)!
+      const existing = candidateMap.get(hourKey)!
       existing.passCount++
       // Mantener la primera marcación como la hora oficial de consumo
       if (detectedAt < existing.detectedAt) {
