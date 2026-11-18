@@ -107,28 +107,6 @@ export default defineApiHandler(async (event) => {
       d => d.request.shiftType === currentActiveShift && d.modality === 'DINE_IN' && d.dispatchedAt !== null
     )
     if (alreadyDispatchedInCurrentShift) {
-      // Ventana de idempotencia visual (8 segundos): si múltiples pantallas/pestañas reciben el evento Socket.io
-      // al mismo tiempo, todas muestran "¡Buen Provecho!" con su foto sin arrojar falso positivo de duplicidad.
-      const elapsedMs = Date.now() - new Date(alreadyDispatchedInCurrentShift.dispatchedAt!).getTime()
-      if (elapsedMs >= 0 && elapsedMs < 8000 && alreadyDispatchedInCurrentShift.request.diningRoomId === diningRoomId) {
-        return {
-          success: true,
-          message: 'Despacho Exitoso',
-          diner: {
-            id: diner.id,
-            name: diner.name,
-            cedula: diner.cedula
-          },
-          dispatch: {
-            shift: currentShiftSchedule?.shiftType || alreadyDispatchedInCurrentShift.request.shiftType,
-            modality: alreadyDispatchedInCurrentShift.modality,
-            rationType: alreadyDispatchedInCurrentShift.rationType,
-            quantity: alreadyDispatchedInCurrentShift.quantity,
-            dispatchedAt: alreadyDispatchedInCurrentShift.dispatchedAt
-          }
-        }
-      }
-
       const dispatchedTime = dayjs(alreadyDispatchedInCurrentShift.dispatchedAt).tz('America/Caracas').format('hh:mm A')
       const roomName = alreadyDispatchedInCurrentShift.request.diningRoom?.name || 'otro comedor'
       throw new DomainError(
